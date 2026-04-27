@@ -107,6 +107,24 @@ def init_endpoint_config() -> None:
     except sqlite3.OperationalError:
         pass
     conn.commit()
+    # Schema inference table
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS endpoint_schemas (
+            endpoint_id TEXT PRIMARY KEY,
+            schema_json TEXT NOT NULL,
+            inferred_at TEXT NOT NULL,
+            webhook_count INTEGER DEFAULT 0,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    # Migration: add validation_errors to webhooks
+    try:
+        conn.execute("ALTER TABLE webhooks ADD COLUMN validation_errors TEXT")
+    except sqlite3.OperationalError:
+        pass
+    conn.commit()
     conn.close()
 
 
@@ -270,7 +288,16 @@ def get_webhooks(endpoint_id: Optional[str] = None, limit: int = 100) -> list:
             (limit,),
         ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        if d.get("validation_errors"):
+            try:
+                d["validation_errors"] = json.loads(d["validation_errors"])
+            except (json.JSONDecodeError, ValueError):
+                d["validation_errors"] = None
+        result.append(d)
+    return result
 
 
 def get_webhook(webhook_id: str) -> Optional[dict]:
@@ -306,6 +333,52 @@ def delete_webhook(webhook_id: str) -> None:
 def delete_all_for_endpoint(endpoint_id: str) -> None:
     conn = _get_conn()
     conn.execute("DELETE FROM webhooks WHERE endpoint_id = ?", (endpoint_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_schema(endpoint_id: str) -> Optional[dict]:
+    conn = _get_conn()
+    row = conn.execute("SELECT * FROM endpoint_schemas WHERE endpoint_id = ?", (endpoint_id,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    return dict(row)
+
+
+def set_schema(endpoint_id: str, schema: dict, webhook_count: int) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    schema_json = json.dumps(schema, default=str)
+    conn = _get_conn()
+    conn.execute(
+        """
+        INSERT INTO endpoint_schemas (endpoint_id, schema_json, inferred_at, webhook_count, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(endpoint_id) DO UPDATE SET
+            schema_json = excluded.schema_json,
+            inferred_at = excluded.inferred_at,
+            webhook_count = excluded.webhook_count,
+            updated_at = excluded.updated_at
+        """,
+        (endpoint_id, schema_json, now, webhook_count, now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_schema(endpoint_id: str) -> None:
+    conn = _get_conn()
+    conn.execute("DELETE FROM endpoint_schemas WHERE endpoint_id = ?", (endpoint_id,))
+    conn.commit()
+    conn.close()
+
+
+def update_validation_errors(webhook_id: str, errors: list) -> None:
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE webhooks SET validation_errors = ? WHERE id = ?",
+        (json.dumps(errors, default=str) if errors else None, webhook_id),
+    )
     conn.commit()
     conn.close()
 

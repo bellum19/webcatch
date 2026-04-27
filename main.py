@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 
 import storage
 import inspector
+import schema_engine
 
 
 import stripe
@@ -87,7 +88,7 @@ async def lifespan(app: FastAPI):
     # cleanup if needed
 
 
-app = FastAPI(title="Webhook Inspector", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="Webhook Inspector", version="0.5.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(APP_DIR, "static")), name="static")
 
 
@@ -243,6 +244,12 @@ async def capture_webhook(endpoint_id: str, request: Request):
         _analyze_and_store(webhook_id, request.method, str(request.url), headers, body_text, query_params)
     )
 
+    # Fire-and-forget schema inference + validation
+    if body_text:
+        asyncio.create_task(
+            _infer_and_validate_schema(endpoint_id, webhook_id, body_text)
+        )
+
     # Fire-and-forget forwarding if configured
     if config and config.get("forward_url"):
         asyncio.create_task(
@@ -265,6 +272,7 @@ async def capture_webhook(endpoint_id: str, request: Request):
             "analyzed": 0,
             "analysis": None,
             "latency_ms": round(latency_ms, 2),
+            "validation_errors": None,
         },
     }
     asyncio.create_task(manager.broadcast(webhook_data))
@@ -317,6 +325,38 @@ async def _analyze_and_store(
             "analysis": f"Analysis failed: {e}",
             "analysis_time_ms": round(elapsed_ms, 2),
         })
+
+
+async def _infer_and_validate_schema(endpoint_id: str, webhook_id: str, body_text: str) -> None:
+    """Background task: infer schema from all webhooks for endpoint, validate this webhook."""
+    try:
+        # Get existing schema
+        existing = storage.get_schema(endpoint_id)
+        schema = None
+        if existing:
+            schema = json.loads(existing["schema_json"])
+
+        # Validate current webhook against existing schema
+        validation_errors = []
+        if schema:
+            validation_errors = schema_engine.validate_body(body_text, schema)
+            if validation_errors:
+                storage.update_validation_errors(webhook_id, validation_errors)
+                await manager.broadcast({
+                    "type": "validation_update",
+                    "webhook_id": webhook_id,
+                    "validation_errors": validation_errors,
+                })
+
+        # Re-infer schema from recent webhooks for this endpoint
+        recent = storage.get_webhooks(endpoint_id, limit=200)
+        bodies = [wh["body"] for wh in recent if wh.get("body")]
+        new_schema = schema_engine.infer_schema(bodies)
+        if new_schema:
+            storage.set_schema(endpoint_id, new_schema, len(bodies))
+    except Exception:
+        # Schema inference should never break the capture flow
+        pass
 
 
 # Thread pool for running user transform scripts
@@ -725,6 +765,54 @@ async def set_endpoint_config(endpoint_id: str, request: Request):
 
 
 # ---------------------------------------------------------------------------
+# API: Schema inference
+# ---------------------------------------------------------------------------
+
+@app.get("/api/endpoints/{endpoint_id}/schema")
+async def get_endpoint_schema(endpoint_id: str):
+    row = storage.get_schema(endpoint_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="No schema inferred yet. Capture some JSON webhooks first.")
+    return {
+        "endpoint_id": endpoint_id,
+        "schema": json.loads(row["schema_json"]),
+        "inferred_at": row["inferred_at"],
+        "webhook_count": row["webhook_count"],
+    }
+
+
+@app.post("/api/endpoints/{endpoint_id}/schema/infer")
+async def infer_endpoint_schema(endpoint_id: str):
+    """Force re-inference of schema from recent webhooks."""
+    recent = storage.get_webhooks(endpoint_id, limit=500)
+    bodies = [wh["body"] for wh in recent if wh.get("body")]
+    schema = schema_engine.infer_schema(bodies)
+    if not schema:
+        raise HTTPException(status_code=400, detail="No valid JSON bodies found to infer schema from.")
+    storage.set_schema(endpoint_id, schema, len(bodies))
+    return {
+        "endpoint_id": endpoint_id,
+        "schema": schema,
+        "webhook_count": len(bodies),
+    }
+
+
+@app.delete("/api/endpoints/{endpoint_id}/schema")
+async def delete_endpoint_schema(endpoint_id: str):
+    storage.delete_schema(endpoint_id)
+    return {"status": "deleted"}
+
+
+@app.get("/api/endpoints/{endpoint_id}/schema/openapi")
+async def export_schema_openapi(endpoint_id: str):
+    row = storage.get_schema(endpoint_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="No schema inferred yet.")
+    schema = json.loads(row["schema_json"])
+    return schema_engine.to_openapi(schema, title=f"Webhook {endpoint_id}")
+
+
+# ---------------------------------------------------------------------------
 # API: Replay webhook
 # ---------------------------------------------------------------------------
 
@@ -921,7 +1009,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "0.3.0", "local_llm": inspector.LOCAL_LLM_URL}
+    return {"status": "ok", "version": "0.5.0", "local_llm": inspector.LOCAL_LLM_URL}
 
 
 if __name__ == "__main__":

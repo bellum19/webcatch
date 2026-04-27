@@ -444,6 +444,7 @@
                 <input type="text" id="search-input" placeholder="🔍 Search webhooks..." style="flex:1;min-width:200px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:0.5rem 0.8rem;border-radius:var(--radius);font-size:0.9rem;">
                 <button class="btn btn-secondary btn-sm" onclick="openTestModal()" id="test-btn" style="display:none;">🧪 Test</button>
                 <button class="btn btn-secondary btn-sm" onclick="openConfigModal()" id="config-btn" style="display:none;">⚙️ Config</button>
+                <button class="btn btn-secondary btn-sm" onclick="openSchemaModal()" id="schema-btn" style="display:none;">🧬 Schema</button>
                 <button class="btn btn-secondary btn-sm" onclick="toggleBulkMode()" id="bulk-btn">☑️ Bulk</button>
                 <button class="btn btn-secondary btn-sm" onclick="clearAll()">🗑️ Clear All</button>
                 <button class="btn btn-secondary btn-sm" onclick="exportAll()">📤 JSON</button>
@@ -536,6 +537,20 @@
         </div>
     </div>
 
+    <!-- Schema Modal -->
+    <div class="modal-overlay" id="schema-modal">
+        <div class="modal" style="max-width:700px;">
+            <h3>Inferred Schema</h3>
+            <div id="schema-info" style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem;"></div>
+            <pre id="schema-display" style="max-height:400px;">No schema inferred yet. Capture some JSON webhooks to see the inferred schema.</pre>
+            <div class="actions">
+                <button class="btn btn-secondary" onclick="closeSchemaModal()">Close</button>
+                <button class="btn btn-secondary" onclick="forceInferSchema()">🔄 Re-infer</button>
+                <button class="btn" onclick="exportSchemaOpenAPI()">📤 OpenAPI</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Bulk Replay Modal -->
     <div class="modal-overlay" id="bulk-replay-modal">
         <div class="modal">
@@ -609,6 +624,8 @@
                     handleAnalysisUpdate(msg.webhook_id, msg.analysis, msg.analysis_time_ms);
                 } else if (msg.type === 'forward_update') {
                     handleForwardUpdate(msg.webhook_id, msg.forward_status);
+                } else if (msg.type === 'validation_update') {
+                    handleValidationUpdate(msg.webhook_id, msg.validation_errors);
                 }
             };
 
@@ -653,6 +670,14 @@
             const wh = webhooks.find(w => w.id === webhookId);
             if (wh) {
                 wh.forward_status = forwardStatus;
+                renderWebhooks();
+            }
+        }
+
+        function handleValidationUpdate(webhookId, validationErrors) {
+            const wh = webhooks.find(w => w.id === webhookId);
+            if (wh) {
+                wh.validation_errors = validationErrors;
                 renderWebhooks();
             }
         }
@@ -706,6 +731,7 @@
             currentEndpoint = ep;
             document.querySelectorAll('.endpoint-item').forEach(el => el.classList.remove('active'));
             document.getElementById('config-btn').style.display = ep ? 'inline-block' : 'none';
+            document.getElementById('schema-btn').style.display = ep ? 'inline-block' : 'none';
             document.getElementById('test-btn').style.display = ep ? 'inline-block' : 'none';
             loadWebhooks();
         }
@@ -762,6 +788,12 @@
                             : `<span class="badge" style="background:rgba(210,153,34,0.15);color:var(--warning);">↗️ Forward ${wh.forward_status}</span>`))
                     : '';
 
+                const validationBadge = wh.validation_errors && wh.validation_errors.length > 0
+                    ? `<span class="badge" style="background:rgba(248,81,73,0.15);color:var(--danger);cursor:pointer;" title="${escapeHtml(wh.validation_errors.join('\\n'))}">⚠️ ${wh.validation_errors.length} issue${wh.validation_errors.length > 1 ? 's' : ''}</span>`
+                    : (wh.validation_errors !== undefined && wh.validation_errors !== null
+                        ? `<span class="badge" style="background:rgba(63,185,80,0.15);color:var(--success);">✅ Valid</span>`
+                        : '');
+
                 return `
                 <div class="webhook-card" id="wh-${wh.id}">
                     <div class="webhook-header" onclick="toggleBody('${wh.id}')">
@@ -770,6 +802,7 @@
                         <span class="webhook-url">${escapeHtml(wh.url)}</span>
                         ${latencyBadge}
                         ${forwardStatus}
+                        ${validationBadge}
                         <span class="webhook-time">${time}</span>
                     </div>
                     <div class="webhook-body" id="body-${wh.id}">
@@ -964,6 +997,48 @@
                 filter_rules: filters,
             });
             closeConfigModal();
+        }
+
+        // Schema modal
+        async function openSchemaModal() {
+            if (!currentEndpoint) return;
+            await loadSchemaDisplay();
+            document.getElementById('schema-modal').classList.add('open');
+        }
+
+        function closeSchemaModal() {
+            document.getElementById('schema-modal').classList.remove('open');
+        }
+
+        async function loadSchemaDisplay() {
+            const display = document.getElementById('schema-display');
+            const info = document.getElementById('schema-info');
+            try {
+                const data = await api('GET', '/api/endpoints/' + currentEndpoint + '/schema');
+                display.textContent = JSON.stringify(data.schema, null, 2);
+                info.textContent = `Inferred at ${new Date(data.inferred_at).toLocaleString()} from ${data.webhook_count} webhooks`;
+            } catch (e) {
+                display.textContent = 'No schema inferred yet. Capture some JSON webhooks to see the inferred schema.';
+                info.textContent = '';
+            }
+        }
+
+        async function forceInferSchema() {
+            if (!currentEndpoint) return;
+            const display = document.getElementById('schema-display');
+            display.textContent = 'Inferring schema...';
+            try {
+                const data = await api('POST', '/api/endpoints/' + currentEndpoint + '/schema/infer');
+                display.textContent = JSON.stringify(data.schema, null, 2);
+                document.getElementById('schema-info').textContent = `Inferred from ${data.webhook_count} webhooks`;
+            } catch (e) {
+                display.textContent = 'Failed to infer schema: ' + e.message;
+            }
+        }
+
+        function exportSchemaOpenAPI() {
+            if (!currentEndpoint) return;
+            window.location.href = '/api/endpoints/' + currentEndpoint + '/schema/openapi';
         }
 
         function exportAll() {

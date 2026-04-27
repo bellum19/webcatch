@@ -13,6 +13,7 @@ Most webhook tools send your data to someone else's cloud. Webcatch doesn't. Eve
 - **📡 Real-time dashboard** — WebSocket-powered live updates.
 - **🔄 Replay & proxy** — Resend webhooks, forward to backends, transform payloads with Python scripts, verify HMAC signatures.
 - **🧠 AI analysis** — Analyze webhooks with your local LLM (optional).
+- **🧬 Auto schema inference** — Automatically infer JSON schemas from webhook history. Validate new webhooks against the inferred schema and export as OpenAPI.
 - **🔍 Search & diff** — Full-text search. Side-by-side webhook comparison.
 
 ---
@@ -53,6 +54,7 @@ python main.py
 | AI analysis | ✅ | ✅ |
 | **Postman / cURL export** | ✅ | ✅ |
 | **Transform scripts** | ✅ | ✅ |
+| **Schema inference & validation** | ✅ | ✅ |
 | Unlimited history | 100 recent | Unlimited |
 | Team sharing | ❌ | Up to 5 users |
 | Custom responses | ❌ | ✅ |
@@ -105,6 +107,9 @@ LOCAL_LLM_MODEL=qwen-local
 | `/api/webhooks/export?format=curl` | GET | Export as cURL script |
 | `/api/webhooks/export?format=csv` | GET | Export as CSV |
 | `/api/endpoints/{id}/config` | GET/PUT | Get/set endpoint config (forward URL, transforms, filters, custom responses) |
+| `/api/endpoints/{id}/schema` | GET | Get inferred JSON schema for endpoint |
+| `/api/endpoints/{id}/schema/infer` | POST | Force re-inference of schema |
+| `/api/endpoints/{id}/schema/openapi` | GET | Export inferred schema as OpenAPI document |
 | `/wh/{id}` | ANY | Capture webhooks |
 | `/api/webhooks/{id}/replay` | POST | Replay webhook |
 | `/api/webhooks/{id}/export` | GET | Export single webhook |
@@ -136,6 +141,22 @@ body = json.dumps(data)
 ```
 
 Scripts run in a restricted sandbox with a 5-second timeout. If a script fails, the original webhook is forwarded unchanged and the error is logged.
+
+---
+
+## Schema Inference
+
+Webcatch automatically analyzes JSON webhook bodies for each endpoint and infers a JSON Schema. New webhooks are validated against this schema in real-time — anomalies show a red ⚠️ badge on the webhook card.
+
+What gets inferred:
+- **Types** — `string`, `integer`, `number`, `boolean`, `array`, `object`, `null`
+- **Required fields** — fields that appear in every observed webhook
+- **Enums** — string values with ≤10 distinct observed values
+- **Min/max** — numeric ranges
+
+Inferred schemas are updated continuously as new webhooks arrive. You can also force re-inference or clear the schema from the dashboard.
+
+Export the inferred schema as an **OpenAPI 3.0 document** for documentation or code generation.
 
 ---
 
