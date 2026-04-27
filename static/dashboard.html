@@ -507,6 +507,17 @@
             <div class="section-title">Forward URL (Proxy Mode)</div>
             <input type="text" id="config-forward" placeholder="https://your-app.com/webhook">
             <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.5rem;">If set, all webhooks are captured AND forwarded to this URL.</div>
+            <div class="section-title">🔧 Transform Script (Python)</div>
+            <textarea id="config-transform" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.6rem;border-radius:var(--radius);min-height:140px;font-family:monospace;font-size:0.8rem;" placeholder="# Mutate the webhook before forwarding.
+# Available variables: method, url, headers, body, query
+
+# Example: strip PII
+# import json
+# data = json.loads(body)
+# data.pop('email', None)
+# body = json.dumps(data)
+"></textarea>
+            <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.5rem;">Runs in a sandbox before forwarding. Modify the variables above. 5s timeout.</div>
             <div class="section-title">Status Code</div>
             <input type="number" id="config-status" value="200" min="100" max="599">
             <div class="section-title">Response Headers (JSON)</div>
@@ -903,6 +914,7 @@
                 document.getElementById('config-headers').value = JSON.stringify(cfg.response_headers || {}, null, 2);
                 document.getElementById('config-body').value = cfg.response_body || '';
                 document.getElementById('config-forward').value = cfg.forward_url || '';
+                document.getElementById('config-transform').value = cfg.transform_script || '';
                 document.getElementById('config-retention').value = cfg.retention_count || 0;
                 document.getElementById('config-filters').value = JSON.stringify(cfg.filter_rules || {}, null, 2);
             } catch (e) {
@@ -910,6 +922,7 @@
                 document.getElementById('config-headers').value = '{}';
                 document.getElementById('config-body').value = '';
                 document.getElementById('config-forward').value = '';
+                document.getElementById('config-transform').value = '';
                 document.getElementById('config-retention').value = 0;
                 document.getElementById('config-filters').value = '{}';
             }
@@ -939,12 +952,14 @@
             const body = document.getElementById('config-body').value || null;
             const statusCode = parseInt(document.getElementById('config-status').value, 10) || 200;
             const forwardUrl = document.getElementById('config-forward').value || null;
+            const transformScript = document.getElementById('config-transform').value || null;
             const retention = parseInt(document.getElementById('config-retention').value, 10) || 0;
             await api('PUT', '/api/endpoints/' + currentEndpoint + '/config', {
                 status_code: statusCode,
                 response_headers: headers,
                 response_body: body,
                 forward_url: forwardUrl,
+                transform_script: transformScript,
                 retention_count: retention,
                 filter_rules: filters,
             });

@@ -18,6 +18,7 @@ import aiohttp
 import asyncio
 import json
 import os
+import concurrent.futures
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
@@ -245,7 +246,7 @@ async def capture_webhook(endpoint_id: str, request: Request):
     # Fire-and-forget forwarding if configured
     if config and config.get("forward_url"):
         asyncio.create_task(
-            _forward_webhook(webhook_id, request.method, config["forward_url"], headers, body, query_params)
+            _forward_webhook(webhook_id, request.method, config["forward_url"], headers, body, query_params, transform_script=config.get("transform_script"))
         )
 
     # Broadcast to all connected WebSocket clients
@@ -286,6 +287,83 @@ async def capture_webhook(endpoint_id: str, request: Request):
     )
 
 
+async def _analyze_and_store(
+    webhook_id: str,
+    method: str,
+    url: str,
+    headers: dict,
+    body: Optional[str],
+    query_params: dict,
+) -> None:
+    """Background task: run local LLM analysis and store result."""
+    start = time.time()
+    try:
+        analysis = await inspector.analyze_webhook(method, url, headers, body, query_params)
+        elapsed_ms = (time.time() - start) * 1000
+        storage.update_analysis(webhook_id, analysis, analysis_time_ms=round(elapsed_ms, 2))
+        # Broadcast analysis update
+        await manager.broadcast({
+            "type": "analysis_update",
+            "webhook_id": webhook_id,
+            "analysis": analysis,
+            "analysis_time_ms": round(elapsed_ms, 2),
+        })
+    except Exception as e:
+        elapsed_ms = (time.time() - start) * 1000
+        storage.update_analysis(webhook_id, f"Analysis failed: {e}", analysis_time_ms=round(elapsed_ms, 2))
+        await manager.broadcast({
+            "type": "analysis_update",
+            "webhook_id": webhook_id,
+            "analysis": f"Analysis failed: {e}",
+            "analysis_time_ms": round(elapsed_ms, 2),
+        })
+
+
+# Thread pool for running user transform scripts
+_transform_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="transform")
+
+
+def _run_transform_sync(script: str, method: str, url: str, headers: dict, body: Optional[str], query: dict) -> tuple:
+    """Run a user transform script in a restricted sandbox. Returns (method, url, headers, body, query, error)."""
+    if not script or not script.strip():
+        return method, url, headers, body, query, None
+
+    safe_globals = {
+        "__builtins__": {
+            "len": len, "str": str, "int": int, "float": float,
+            "bool": bool, "dict": dict, "list": list, "tuple": tuple, "set": set,
+            "json": __import__("json"),
+            "re": __import__("re"),
+            "datetime": __import__("datetime"),
+            "print": lambda *a, **k: None,
+            "type": type, "isinstance": isinstance, "hasattr": hasattr, "getattr": getattr,
+            "enumerate": enumerate, "range": range, "zip": zip, "map": map, "filter": filter,
+            "sum": sum, "min": min, "max": max, "abs": abs, "round": round,
+        }
+    }
+
+    locals_dict = {
+        "method": method,
+        "url": url,
+        "headers": dict(headers),
+        "body": body,
+        "query": dict(query),
+    }
+
+    try:
+        exec(script, safe_globals, locals_dict)
+        return (
+            locals_dict.get("method", method),
+            locals_dict.get("url", url),
+            locals_dict.get("headers", headers),
+            locals_dict.get("body", body),
+            locals_dict.get("query", query),
+            None,
+        )
+    except Exception as e:
+        return method, url, headers, body, query, str(e)
+
+
 async def _forward_webhook(
     webhook_id: str,
     method: str,
@@ -293,10 +371,63 @@ async def _forward_webhook(
     headers: dict,
     body: Optional[bytes],
     query_params: dict,
+    transform_script: Optional[str] = None,
 ) -> None:
-    """Forward captured webhook to another URL with retry."""
+    """Forward captured webhook to another URL with retry and optional transform."""
     max_retries = 3
     base_delay = 1.0
+
+    # Decode body for transform
+    body_text = body.decode("utf-8", errors="replace") if body else None
+
+    # Run transform if configured
+    if transform_script and transform_script.strip():
+        loop = asyncio.get_event_loop()
+        try:
+            t_method, t_url, t_headers, t_body, t_query, t_error = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _transform_executor,
+                    _run_transform_sync,
+                    transform_script,
+                    method,
+                    forward_url,
+                    dict(headers),
+                    body_text,
+                    dict(query_params),
+                ),
+                timeout=5.0,
+            )
+            if t_error:
+                storage.update_forward_status(webhook_id, 0, f"Transform error: {t_error}")
+                await manager.broadcast({
+                    "type": "forward_update",
+                    "webhook_id": webhook_id,
+                    "forward_status": 0,
+                })
+                return
+            method = t_method
+            forward_url = t_url
+            headers = t_headers
+            body_text = t_body
+            query_params = t_query
+            body = t_body.encode("utf-8") if t_body else None
+        except asyncio.TimeoutError:
+            storage.update_forward_status(webhook_id, 0, "Transform error: script timed out after 5s")
+            await manager.broadcast({
+                "type": "forward_update",
+                "webhook_id": webhook_id,
+                "forward_status": 0,
+            })
+            return
+        except Exception as e:
+            storage.update_forward_status(webhook_id, 0, f"Transform error: {e}")
+            await manager.broadcast({
+                "type": "forward_update",
+                "webhook_id": webhook_id,
+                "forward_status": 0,
+            })
+            return
+
     for attempt in range(1, max_retries + 1):
         try:
             target = forward_url
@@ -304,8 +435,9 @@ async def _forward_webhook(
                 separator = "&" if "?" in forward_url else "?"
                 target += separator + "&".join(f"{k}={v}" for k, v in query_params.items())
             fwd_headers = {k: v for k, v in headers.items() if k.lower() not in ["host", "content-length", "transfer-encoding", "connection"]}
+            fwd_body = body
             async with aiohttp.ClientSession() as session:
-                async with session.request(method, target, headers=fwd_headers, data=body) as resp:
+                async with session.request(method, target, headers=fwd_headers, data=fwd_body) as resp:
                     resp_text = await resp.text()
                     storage.update_forward_status(webhook_id, resp.status, resp_text[:2000])
                     await manager.broadcast({
@@ -572,7 +704,7 @@ async def clear_endpoint(endpoint_id: str):
 async def get_endpoint_config(endpoint_id: str):
     cfg = storage.get_endpoint_config(endpoint_id)
     if not cfg:
-        return {"endpoint_id": endpoint_id, "status_code": 200, "response_headers": {}, "response_body": None, "forward_url": None, "retention_count": 0, "filter_rules": {}}
+        return {"endpoint_id": endpoint_id, "status_code": 200, "response_headers": {}, "response_body": None, "forward_url": None, "retention_count": 0, "filter_rules": {}, "transform_script": None}
     return cfg
 
 
@@ -587,6 +719,7 @@ async def set_endpoint_config(endpoint_id: str, request: Request):
         forward_url=data.get("forward_url"),
         retention_count=data.get("retention_count"),
         filter_rules=data.get("filter_rules"),
+        transform_script=data.get("transform_script"),
     )
     return {"status": "updated"}
 

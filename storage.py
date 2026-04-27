@@ -101,6 +101,11 @@ def init_endpoint_config() -> None:
         conn.execute("ALTER TABLE endpoint_configs ADD COLUMN filter_rules TEXT")
     except sqlite3.OperationalError:
         pass
+    # Migration: add transform_script if missing
+    try:
+        conn.execute("ALTER TABLE endpoint_configs ADD COLUMN transform_script TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -113,6 +118,7 @@ def set_endpoint_config(
     forward_url: Optional[str] = None,
     retention_count: Optional[int] = None,
     filter_rules: Optional[dict] = None,
+    transform_script: Optional[str] = None,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
     headers_json = json.dumps(response_headers or {}, default=str)
@@ -120,8 +126,8 @@ def set_endpoint_config(
     conn = _get_conn()
     conn.execute(
         """
-        INSERT INTO endpoint_configs (endpoint_id, status_code, response_headers, response_body, forward_url, retention_count, filter_rules, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO endpoint_configs (endpoint_id, status_code, response_headers, response_body, forward_url, retention_count, filter_rules, transform_script, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(endpoint_id) DO UPDATE SET
             status_code = excluded.status_code,
             response_headers = excluded.response_headers,
@@ -129,9 +135,10 @@ def set_endpoint_config(
             forward_url = excluded.forward_url,
             retention_count = excluded.retention_count,
             filter_rules = excluded.filter_rules,
+            transform_script = excluded.transform_script,
             updated_at = excluded.updated_at
         """,
-        (endpoint_id, status_code, headers_json, response_body, forward_url, retention_count, rules_json, now, now),
+        (endpoint_id, status_code, headers_json, response_body, forward_url, retention_count, rules_json, transform_script, now, now),
     )
     conn.commit()
     conn.close()

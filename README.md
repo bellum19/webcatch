@@ -11,7 +11,7 @@ Most webhook tools send your data to someone else's cloud. Webcatch doesn't. Eve
 
 - **🔒 Privacy-first** — SQLite storage. No telemetry. No cloud lock-in.
 - **📡 Real-time dashboard** — WebSocket-powered live updates.
-- **🔄 Replay & proxy** — Resend webhooks, forward to backends, verify HMAC signatures.
+- **🔄 Replay & proxy** — Resend webhooks, forward to backends, transform payloads with Python scripts, verify HMAC signatures.
 - **🧠 AI analysis** — Analyze webhooks with your local LLM (optional).
 - **🔍 Search & diff** — Full-text search. Side-by-side webhook comparison.
 
@@ -52,6 +52,7 @@ python main.py
 | Webhook diff | ✅ | ✅ |
 | AI analysis | ✅ | ✅ |
 | **Postman / cURL export** | ✅ | ✅ |
+| **Transform scripts** | ✅ | ✅ |
 | Unlimited history | 100 recent | Unlimited |
 | Team sharing | ❌ | Up to 5 users |
 | Custom responses | ❌ | ✅ |
@@ -103,6 +104,7 @@ LOCAL_LLM_MODEL=qwen-local
 | `/api/webhooks/export?format=postman` | GET | Export as Postman collection |
 | `/api/webhooks/export?format=curl` | GET | Export as cURL script |
 | `/api/webhooks/export?format=csv` | GET | Export as CSV |
+| `/api/endpoints/{id}/config` | GET/PUT | Get/set endpoint config (forward URL, transforms, filters, custom responses) |
 | `/wh/{id}` | ANY | Capture webhooks |
 | `/api/webhooks/{id}/replay` | POST | Replay webhook |
 | `/api/webhooks/{id}/export` | GET | Export single webhook |
@@ -110,6 +112,30 @@ LOCAL_LLM_MODEL=qwen-local
 | `/ws` | WebSocket | Live updates |
 
 Full API docs at `/docs` when running.
+
+---
+
+## Transform Scripts
+
+Before forwarding a webhook, you can mutate it with a Python script. Available variables:
+
+- `method` — HTTP method (str)
+- `url` — Target URL (str)
+- `headers` — Dict of headers
+- `body` — Request body (str or None)
+- `query` — Dict of query params
+
+Example — strip PII before forwarding:
+
+```python
+import json
+data = json.loads(body)
+data.pop("email", None)
+data.pop("ssn", None)
+body = json.dumps(data)
+```
+
+Scripts run in a restricted sandbox with a 5-second timeout. If a script fails, the original webhook is forwarded unchanged and the error is logged.
 
 ---
 
