@@ -51,6 +51,7 @@ python main.py
 | Search & filter | ✅ | ✅ |
 | Webhook diff | ✅ | ✅ |
 | AI analysis | ✅ | ✅ |
+| **Postman / cURL export** | ✅ | ✅ |
 | Unlimited history | 100 recent | Unlimited |
 | Team sharing | ❌ | Up to 5 users |
 | Custom responses | ❌ | ✅ |
@@ -99,8 +100,12 @@ LOCAL_LLM_MODEL=qwen-local
 | `/api/endpoints` | POST | Create endpoint |
 | `/api/endpoints` | GET | List endpoints |
 | `/api/webhooks` | GET | List captured webhooks |
+| `/api/webhooks/export?format=postman` | GET | Export as Postman collection |
+| `/api/webhooks/export?format=curl` | GET | Export as cURL script |
+| `/api/webhooks/export?format=csv` | GET | Export as CSV |
 | `/wh/{id}` | ANY | Capture webhooks |
 | `/api/webhooks/{id}/replay` | POST | Replay webhook |
+| `/api/webhooks/{id}/export` | GET | Export single webhook |
 | `/api/webhooks/{a}/diff/{b}` | GET | Compare webhooks |
 | `/ws` | WebSocket | Live updates |
 

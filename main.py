@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI):
     # cleanup if needed
 
 
-app = FastAPI(title="Webhook Inspector", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Webhook Inspector", version="0.4.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(APP_DIR, "static")), name="static")
 
 
@@ -363,6 +363,83 @@ async def _analyze_and_store(
 # API: Export webhooks (must be before /api/webhooks/{webhook_id})
 # ---------------------------------------------------------------------------
 
+def _webhook_to_postman_item(wh: dict) -> dict:
+    """Convert a single webhook to a Postman Collection v2.1 item."""
+    headers = wh.get("headers") or {}
+    query_params = wh.get("query_params") or {}
+    body = wh.get("body")
+    method = wh.get("method", "GET")
+    url = wh.get("url", "")
+    
+    # Build URL object
+    url_obj = {"raw": url, "host": [url]}
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(url)
+        url_obj = {
+            "raw": url,
+            "protocol": parsed.scheme,
+            "host": [parsed.hostname] if parsed.hostname else [""],
+            "port": parsed.port,
+            "path": [p for p in parsed.path.split("/") if p],
+            "query": [{"key": k, "value": v} for k, v in query_params.items()],
+        }
+    except Exception:
+        pass
+    
+    # Build header list (skip hop-by-hop)
+    header_list = []
+    for k, v in headers.items():
+        if k.lower() in ["host", "content-length", "transfer-encoding", "connection"]:
+            continue
+        header_list.append({"key": k, "value": str(v)})
+    
+    # Build body
+    body_obj = None
+    if body:
+        content_type = headers.get("content-type", headers.get("Content-Type", ""))
+        if "json" in content_type.lower():
+            try:
+                body_obj = {"mode": "raw", "raw": body, "options": {"raw": {"language": "json"}}}
+            except Exception:
+                body_obj = {"mode": "raw", "raw": body}
+        else:
+            body_obj = {"mode": "raw", "raw": body}
+    
+    item = {
+        "name": f"{method} {url[:80]}",
+        "request": {
+            "method": method,
+            "header": header_list,
+            "url": url_obj,
+            "description": f"Captured at {wh.get('received_at', '')} from {wh.get('client_ip', 'unknown')}",
+        },
+        "response": [],
+    }
+    if body_obj:
+        item["request"]["body"] = body_obj
+    return item
+
+
+def _webhook_to_curl(wh: dict) -> str:
+    """Convert a single webhook to a cURL command."""
+    headers = wh.get("headers") or {}
+    body = wh.get("body")
+    method = wh.get("method", "GET")
+    url = wh.get("url", "")
+    
+    cmd = f'curl -X {method} "{url}"'
+    for k, v in headers.items():
+        if k.lower() in ["host", "content-length", "transfer-encoding", "connection"]:
+            continue
+        safe_v = str(v).replace('"', '\\"')
+        cmd += f' \\\n  -H "{k}: {safe_v}"'
+    if body:
+        safe_body = body.replace("'", "'\\''")
+        cmd += f" \\\n  -d '{safe_body}'"
+    return cmd
+
+
 @app.get("/api/webhooks/export")
 async def export_webhooks(format: str = "json", endpoint_id: Optional[str] = None):
     webhooks = storage.get_webhooks(endpoint_id=endpoint_id, limit=1000)
@@ -386,6 +463,31 @@ async def export_webhooks(format: str = "json", endpoint_id: Optional[str] = Non
             io.BytesIO(output.getvalue().encode("utf-8")),
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename=webhooks-{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"},
+        )
+    
+    if format == "postman":
+        collection = {
+            "info": {
+                "_postman_id": f"webcatch-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+                "name": f"Webcatch Export — {endpoint_id or 'All Endpoints'}",
+                "description": f"Exported from Webcatch on {datetime.now(timezone.utc).isoformat()}",
+                "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+            },
+            "item": [_webhook_to_postman_item(wh) for wh in webhooks],
+        }
+        return StreamingResponse(
+            io.BytesIO(json.dumps(collection, indent=2).encode("utf-8")),
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename=webcatch-{endpoint_id or 'all'}-{datetime.now(timezone.utc).strftime('%Y%m%d')}.postman_collection.json"},
+        )
+    
+    if format == "curl":
+        commands = [_webhook_to_curl(wh) for wh in webhooks]
+        output = "\n\n# ----\n\n".join(commands)
+        return StreamingResponse(
+            io.BytesIO(output.encode("utf-8")),
+            media_type="text/plain",
+            headers={"Content-Disposition": f"attachment; filename=webcatch-{endpoint_id or 'all'}-{datetime.now(timezone.utc).strftime('%Y%m%d')}.sh"},
         )
 
     return JSONResponse(content={"webhooks": webhooks})
@@ -413,6 +515,41 @@ async def get_webhook(webhook_id: str):
     wh["headers"] = json.loads(wh["headers"]) if wh["headers"] else {}
     wh["query_params"] = json.loads(wh["query_params"]) if wh["query_params"] else {}
     return wh
+
+
+@app.get("/api/webhooks/{webhook_id}/export")
+async def export_single_webhook(webhook_id: str, format: str = "curl"):
+    wh = storage.get_webhook(webhook_id)
+    if not wh:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    wh["headers"] = json.loads(wh["headers"]) if wh["headers"] else {}
+    wh["query_params"] = json.loads(wh["query_params"]) if wh["query_params"] else {}
+    
+    if format == "postman":
+        collection = {
+            "info": {
+                "_postman_id": f"webcatch-single-{webhook_id}",
+                "name": f"Webcatch Single — {wh['method']} {wh['url'][:60]}",
+                "description": f"Exported from Webcatch on {datetime.now(timezone.utc).isoformat()}",
+                "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+            },
+            "item": [_webhook_to_postman_item(wh)],
+        }
+        return StreamingResponse(
+            io.BytesIO(json.dumps(collection, indent=2).encode("utf-8")),
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename=webcatch-{webhook_id}.postman_collection.json"},
+        )
+    
+    if format == "curl":
+        cmd = _webhook_to_curl(wh)
+        return StreamingResponse(
+            io.BytesIO(cmd.encode("utf-8")),
+            media_type="text/plain",
+            headers={"Content-Disposition": f"attachment; filename=webcatch-{webhook_id}.sh"},
+        )
+    
+    raise HTTPException(status_code=400, detail="Format must be 'postman' or 'curl'")
 
 
 @app.delete("/api/webhooks/{webhook_id}")

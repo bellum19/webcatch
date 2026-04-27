@@ -448,6 +448,8 @@
                 <button class="btn btn-secondary btn-sm" onclick="clearAll()">🗑️ Clear All</button>
                 <button class="btn btn-secondary btn-sm" onclick="exportAll()">📤 JSON</button>
                 <button class="btn btn-secondary btn-sm" onclick="exportCSV()">📄 CSV</button>
+                <button class="btn btn-secondary btn-sm" onclick="exportPostmanBulk()">🛠️ Postman</button>
+                <button class="btn btn-secondary btn-sm" onclick="exportCurlBulk()">💻 cURL</button>
             </div>
             <div class="bulk-bar" id="bulk-bar">
                 <span id="bulk-count" style="font-size:0.85rem;color:var(--text-secondary);">0 selected</span>
@@ -762,6 +764,7 @@
                     <div class="webhook-body" id="body-${wh.id}">
                         <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;">
                             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); copyToClipboard('${escapeJs(wh.id)}')">📋 Copy cURL</button>
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); exportPostman('${escapeJs(wh.id)}')">🛠️ Postman</button>
                             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); replayWebhook('${escapeJs(wh.id)}')">🔄 Replay</button>
                             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); verifySig('${escapeJs(wh.id)}')">🔐 Verify Sig</button>
                             <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteWebhook('${escapeJs(wh.id)}')">🗑️ Delete</button>
@@ -961,6 +964,22 @@
         function exportCSV() {
             const endpoint = currentEndpoint || '';
             const url = '/api/webhooks/export?format=csv' + (endpoint ? '&endpoint_id=' + endpoint : '');
+            window.location.href = url;
+        }
+
+        function exportPostman(id) {
+            window.location.href = '/api/webhooks/' + id + '/export?format=postman';
+        }
+
+        function exportPostmanBulk() {
+            const endpoint = currentEndpoint || '';
+            const url = '/api/webhooks/export?format=postman' + (endpoint ? '&endpoint_id=' + endpoint : '');
+            window.location.href = url;
+        }
+
+        function exportCurlBulk() {
+            const endpoint = currentEndpoint || '';
+            const url = '/api/webhooks/export?format=curl' + (endpoint ? '&endpoint_id=' + endpoint : '');
             window.location.href = url;
         }
 
