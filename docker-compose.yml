@@ -1,0 +1,11 @@
+services:
+  webhook-inspector:
+    build: .
+    container_name: webhook-inspector
+    ports:
+      - "9120:9120"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped

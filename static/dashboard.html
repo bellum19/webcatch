@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook Inspector</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --success: #3fb950;
+            --warning: #d29922;
+            --danger: #f85149;
+            --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --radius: 8px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo::before {
+            content: "🔍";
+            font-size: 1.2rem;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.2rem;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: var(--radius);
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.15s;
+        }
+
+        .btn:hover { background: var(--accent-hover); }
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover { background: var(--border); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { background: #ff7b72; }
+        .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 0;
+            height: calc(100vh - 70px);
+        }
+
+        @media (max-width: 768px) {
+            main { grid-template-columns: 1fr; }
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            overflow-y: auto;
+        }
+
+        .sidebar h2 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .endpoint-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.8rem;
+            cursor: pointer;
+            transition: border-color 0.15s;
+            word-break: break-all;
+        }
+
+        .endpoint-item:hover, .endpoint-item.active {
+            border-color: var(--accent);
+        }
+
+        .endpoint-item .ep-id {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.85rem;
+            color: var(--accent);
+        }
+
+        .endpoint-item .ep-url {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.3rem;
+        }
+
+        .new-endpoint {
+            margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .new-endpoint input {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.6rem;
+            border-radius: var(--radius);
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+
+        .new-endpoint .url-preview {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin: 0.5rem 0;
+            word-break: break-all;
+        }
+
+        /* Content */
+        .content {
+            padding: 1.5rem 2rem;
+            overflow-y: auto;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .webhook-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .webhook-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .webhook-header {
+            padding: 0.8rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .method {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-family: monospace;
+        }
+
+        .method-post { background: var(--success); color: #000; }
+        .method-get { background: var(--accent); color: #000; }
+        .method-put { background: var(--warning); color: #000; }
+        .method-patch { background: #a371f7; color: #fff; }
+        .method-delete { background: var(--danger); color: #fff; }
+        .method-default { background: var(--bg-tertiary); color: var(--text); }
+
+        .webhook-time {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-left: auto;
+        }
+
+        .webhook-url {
+            font-size: 0.85rem;
+            font-family: monospace;
+            color: var(--text);
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .webhook-body {
+            display: none;
+            border-top: 1px solid var(--border);
+            padding: 1rem;
+        }
+
+        .webhook-body.open { display: block; }
+
+        .section-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin: 1rem 0 0.5rem;
+        }
+
+        .section-title:first-child { margin-top: 0; }
+
+        pre {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.8rem;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.8rem;
+            overflow-x: auto;
+            color: var(--text);
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .analysis-box {
+            background: linear-gradient(135deg, rgba(88, 166, 255, 0.08), rgba(88, 166, 255, 0.02));
+            border: 1px solid rgba(88, 166, 255, 0.3);
+            border-radius: var(--radius);
+            padding: 1rem;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .analysis-box .loading {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            margin-left: 0.5rem;
+        }
+
+        .copy-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+        }
+        .copy-btn:hover { color: var(--text); border-color: var(--text-secondary); }
+
+        .toggle-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            cursor: pointer;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        .toggle-switch input { display: none; }
+        .toggle-switch .slider {
+            width: 32px; height: 18px;
+            background: var(--bg-tertiary);
+            border-radius: 9px;
+            position: relative;
+            border: 1px solid var(--border);
+            transition: background 0.15s;
+        }
+        .toggle-switch .slider::after {
+            content: '';
+            position: absolute;
+            width: 12px; height: 12px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            top: 2px; left: 2px;
+            transition: transform 0.15s, background 0.15s;
+        }
+        .toggle-switch input:checked + .slider { background: rgba(63,185,80,0.3); border-color: var(--success); }
+        .toggle-switch input:checked + .slider::after { transform: translateX(14px); background: var(--success); }
+
+        .endpoint-item.disabled { opacity: 0.5; }
+        .endpoint-item .ep-actions { display: flex; gap: 0.3rem; margin-top: 0.4rem; align-items: center; }
+
+        .stats-panel { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.8rem; margin-bottom: 1rem; }
+        .stats-panel h3 { font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.5rem; }
+        .stats-bar { display: flex; align-items: flex-end; gap: 2px; height: 40px; }
+        .stats-bar .bar { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; opacity: 0.7; }
+        .stats-bar .bar:hover { opacity: 1; }
+        .stats-count { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+        .stats-label { font-size: 0.75rem; color: var(--text-secondary); }
+
+        .wh-checkbox {
+            width: 16px; height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+            margin-right: 0.4rem;
+        }
+
+        .bulk-bar {
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 0.75rem;
+        }
+        .bulk-bar.open { display: flex; }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .modal-overlay.open { display: flex; }
+
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal h3 { margin-bottom: 1rem; }
+        .modal input {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.6rem;
+            border-radius: var(--radius);
+            margin-bottom: 0.5rem;
+        }
+        .modal .actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <div class="logo">Webhook Inspector</div>
+            <div class="subtitle">Self-hosted. Privacy-first. AI-powered.</div>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+            <span id="llm-status" class="badge" style="background:rgba(63,185,80,0.15);color:var(--success);">LLM Ready</span>
+            <button class="btn btn-secondary btn-sm" onclick="refreshData()">🔄 Refresh</button>
+        </div>
+    </header>
+
+    <main>
+        <aside class="sidebar">
+            <div>
+                <div class="stats-panel" id="stats-panel" style="display:none;">
+                    <h3>Last 24h</h3>
+                    <div style="display:flex;gap:1rem;align-items:center;margin-bottom:0.5rem;">
+                        <div><div class="stats-count" id="stats-total">0</div><div class="stats-label">Total</div></div>
+                        <div><div class="stats-count" id="stats-today">0</div><div class="stats-label">Today</div></div>
+                    </div>
+                    <div class="stats-bar" id="stats-bars"></div>
+                </div>
+                <h2>Endpoints</h2>
+                <div id="endpoints-list"></div>
+            </div>
+            <div class="new-endpoint">
+                <button class="btn" style="width:100%;" onclick="createEndpoint()">+ New Endpoint</button>
+                <div id="new-endpoint-info" style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-secondary);display:none;">
+                    <div>Endpoint created!</div>
+                    <div id="new-endpoint-url" style="word-break:break-all;color:var(--accent);margin-top:0.3rem;"></div>
+                </div>
+            </div>
+        </aside>
+
+        <section class="content">
+            <div class="toolbar">
+                <input type="text" id="search-input" placeholder="🔍 Search webhooks..." style="flex:1;min-width:200px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:0.5rem 0.8rem;border-radius:var(--radius);font-size:0.9rem;">
+                <button class="btn btn-secondary btn-sm" onclick="openTestModal()" id="test-btn" style="display:none;">🧪 Test</button>
+                <button class="btn btn-secondary btn-sm" onclick="openConfigModal()" id="config-btn" style="display:none;">⚙️ Config</button>
+                <button class="btn btn-secondary btn-sm" onclick="toggleBulkMode()" id="bulk-btn">☑️ Bulk</button>
+                <button class="btn btn-secondary btn-sm" onclick="clearAll()">🗑️ Clear All</button>
+                <button class="btn btn-secondary btn-sm" onclick="exportAll()">📤 JSON</button>
+                <button class="btn btn-secondary btn-sm" onclick="exportCSV()">📄 CSV</button>
+            </div>
+            <div class="bulk-bar" id="bulk-bar">
+                <span id="bulk-count" style="font-size:0.85rem;color:var(--text-secondary);">0 selected</span>
+                <button class="btn btn-sm" onclick="openBulkReplayModal()">🔄 Replay Selected</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteSelected()">🗑️ Delete Selected</button>
+                <button class="btn btn-sm btn-secondary" onclick="toggleBulkMode()">Cancel</button>
+            </div>
+            <div id="webhooks-container">
+                <div class="empty-state">
+                    <div class="icon">📡</div>
+                    <div>No webhooks captured yet.</div>
+                    <div style="margin-top:0.5rem;font-size:0.9rem;">Create an endpoint on the left and send a request to get started.</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Replay Modal -->
+    <div class="modal-overlay" id="replay-modal">
+        <div class="modal">
+            <h3>Replay Webhook</h3>
+            <div class="section-title">Target URL (leave empty to use original)</div>
+            <input type="text" id="replay-url" placeholder="https://...">
+            <div class="section-title">Body</div>
+            <textarea id="replay-body" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.6rem;border-radius:var(--radius);min-height:120px;font-family:monospace;font-size:0.8rem;"></textarea>
+            <div class="actions">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn" onclick="doReplay()">Send Request</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Verify Modal -->
+    <div class="modal-overlay" id="verify-modal">
+        <div class="modal">
+            <h3>Verify Webhook Signature</h3>
+            <div class="section-title">Stripe Secret (sk_...)</div>
+            <input type="text" id="verify-stripe" placeholder="sk_test_...">
+            <div class="section-title">GitHub Secret</div>
+            <input type="text" id="verify-github" placeholder="your-webhook-secret">
+            <div class="section-title">Shopify Secret</div>
+            <input type="text" id="verify-shopify" placeholder="your-shared-secret">
+            <div id="verify-result" style="margin-top:0.5rem;font-size:0.85rem;"></div>
+            <div class="actions">
+                <button class="btn btn-secondary" onclick="closeVerifyModal()">Close</button>
+                <button class="btn" onclick="doVerify()">Verify</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Config Modal -->
+    <div class="modal-overlay" id="config-modal">
+        <div class="modal" style="max-width:600px;">
+            <h3>Endpoint Configuration</h3>
+            <div class="section-title">Forward URL (Proxy Mode)</div>
+            <input type="text" id="config-forward" placeholder="https://your-app.com/webhook">
+            <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.5rem;">If set, all webhooks are captured AND forwarded to this URL.</div>
+            <div class="section-title">Status Code</div>
+            <input type="number" id="config-status" value="200" min="100" max="599">
+            <div class="section-title">Response Headers (JSON)</div>
+            <textarea id="config-headers" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.6rem;border-radius:var(--radius);min-height:80px;font-family:monospace;font-size:0.8rem;">{}</textarea>
+            <div class="section-title">Response Body (JSON or text)</div>
+            <textarea id="config-body" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.6rem;border-radius:var(--radius);min-height:120px;font-family:monospace;font-size:0.8rem;"></textarea>
+            <div class="section-title">Retention (max webhooks to keep, 0 = unlimited)</div>
+            <input type="number" id="config-retention" value="0" min="0" max="10000">
+            <div class="section-title">Filter Rules (JSON)</div>
+            <textarea id="config-filters" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.6rem;border-radius:var(--radius);min-height:120px;font-family:monospace;font-size:0.8rem;">{}</textarea>
+            <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.5rem;">Example: {"allowed_methods":["POST","PUT"],"required_header":"X-Signature:","body_contains":"payment"}</div>
+            <div class="actions">
+                <button class="btn btn-secondary" onclick="closeConfigModal()">Cancel</button>
+                <button class="btn" onclick="saveConfig()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Replay Modal -->
+    <div class="modal-overlay" id="bulk-replay-modal">
+        <div class="modal">
+            <h3>Bulk Replay <span id="bulk-replay-count" style="color:var(--text-secondary);font-size:0.85rem;"></span></h3>
+            <div class="section-title">Target URL (leave empty to use original URLs)</div>
+            <input type="text" id="bulk-replay-url" placeholder="https://...">
+            <div id="bulk-replay-result" style="margin-top:0.5rem;font-size:0.85rem;max-height:150px;overflow-y:auto;"></div>
+            <div class="actions">
+                <button class="btn btn-secondary" onclick="closeBulkReplayModal()">Close</button>
+                <button class="btn" onclick="doBulkReplay()">Replay All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Webhook Modal -->
+    <div class="modal-overlay" id="test-modal">
+        <div class="modal" style="max-width:600px;">
+            <h3>Test Webhook</h3>
+            <div class="section-title">Target URL</div>
+            <input type="text" id="test-url" placeholder="https://...">
+            <div class="section-title">Method</div>
+            <select id="test-method" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.6rem;border-radius:var(--radius);margin-bottom:0.5rem;">
+                <option value="POST">POST</option>
+                <option value="GET">GET</option>
+                <option value="PUT">PUT</option>
+                <option value="PATCH">PATCH</option>
+                <option value="DELETE">DELETE</option>
+            </select>
+            <div class="section-title">Headers (JSON)</div>
+            <textarea id="test-headers" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.6rem;border-radius:var(--radius);min-height:60px;font-family:monospace;font-size:0.8rem;">{"Content-Type":"application/json"}</textarea>
+            <div class="section-title">Body</div>
+            <textarea id="test-body" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.6rem;border-radius:var(--radius);min-height:120px;font-family:monospace;font-size:0.8rem;">{"test": "hello"}</textarea>
+            <div id="test-result" style="margin-top:0.5rem;font-size:0.85rem;"></div>
+            <div class="actions">
+                <button class="btn btn-secondary" onclick="closeTestModal()">Close</button>
+                <button class="btn" onclick="doTestWebhook()">Send Request</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentEndpoint = null;
+        let webhooks = [];
+        let ws = null;
+        let searchTerm = '';
+        let bulkMode = false;
+        let selectedWebhookIds = new Set();
+
+        async function api(method, path, body) {
+            const opts = { method, headers: {} };
+            if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+            const res = await fetch(path, opts);
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
+        }
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'new_webhook') {
+                    handleNewWebhook(msg.webhook);
+                } else if (msg.type === 'analysis_update') {
+                    handleAnalysisUpdate(msg.webhook_id, msg.analysis, msg.analysis_time_ms);
+                } else if (msg.type === 'forward_update') {
+                    handleForwardUpdate(msg.webhook_id, msg.forward_status);
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected, reconnecting in 3s...');
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error('WebSocket error:', err);
+            };
+        }
+
+        function handleNewWebhook(wh) {
+            // Only add if it matches current endpoint filter
+            if (currentEndpoint && wh.endpoint_id !== currentEndpoint) return;
+            webhooks.unshift(wh);
+            renderWebhooks();
+            // Flash the new card
+            setTimeout(() => {
+                const card = document.getElementById('wh-' + wh.id);
+                if (card) {
+                    card.style.borderColor = 'var(--success)';
+                    setTimeout(() => { card.style.borderColor = ''; }, 2000);
+                }
+            }, 50);
+            // Refresh stats occasionally
+            loadStats();
+        }
+
+        function handleAnalysisUpdate(webhookId, analysis, analysis_time_ms) {
+            const wh = webhooks.find(w => w.id === webhookId);
+            if (wh) {
+                wh.analyzed = 1;
+                wh.analysis = analysis;
+                wh.analysis_time_ms = analysis_time_ms;
+                renderWebhooks();
+            }
+        }
+
+        function handleForwardUpdate(webhookId, forwardStatus) {
+            const wh = webhooks.find(w => w.id === webhookId);
+            if (wh) {
+                wh.forward_status = forwardStatus;
+                renderWebhooks();
+            }
+        }
+
+        async function createEndpoint() {
+            const data = await api('POST', '/api/endpoints');
+            const info = document.getElementById('new-endpoint-info');
+            const url = document.getElementById('new-endpoint-url');
+            url.textContent = data.webhook_url;
+            info.style.display = 'block';
+            loadEndpoints();
+            selectEndpoint(data.endpoint_id);
+        }
+
+        async function loadEndpoints() {
+            const data = await api('GET', '/api/endpoints');
+            const list = document.getElementById('endpoints-list');
+            list.innerHTML = '';
+            data.endpoints.forEach(ep => {
+                const div = document.createElement('div');
+                div.className = 'endpoint-item' + (ep.endpoint_id === currentEndpoint ? ' active' : '') + (ep.enabled ? '' : ' disabled');
+                div.innerHTML = `
+                    <div class="ep-id">${ep.endpoint_id}</div>
+                    <div class="ep-url">/wh/${ep.endpoint_id}</div>
+                    <div class="ep-actions">
+                        <label class="toggle-switch" onclick="event.stopPropagation();">
+                            <input type="checkbox" ${ep.enabled ? 'checked' : ''} onchange="toggleEndpoint('${ep.endpoint_id}', this.checked)">
+                            <span class="slider"></span>
+                            <span>${ep.enabled ? 'ON' : 'OFF'}</span>
+                        </label>
+                        <button class="copy-btn" onclick="event.stopPropagation(); copyText('${ep.webhook_url}')" title="Copy URL">📋</button>
+                    </div>
+                `;
+                div.onclick = () => selectEndpoint(ep.endpoint_id);
+                list.appendChild(div);
+            });
+        }
+
+        async function toggleEndpoint(endpointId, enabled) {
+            await api('POST', '/api/endpoints/' + endpointId + '/toggle');
+            loadEndpoints();
+        }
+
+        function copyText(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Flash feedback could go here
+            });
+        }
+
+        function selectEndpoint(ep) {
+            currentEndpoint = ep;
+            document.querySelectorAll('.endpoint-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('config-btn').style.display = ep ? 'inline-block' : 'none';
+            document.getElementById('test-btn').style.display = ep ? 'inline-block' : 'none';
+            loadWebhooks();
+        }
+
+        async function loadWebhooks() {
+            const url = currentEndpoint ? `/api/webhooks?endpoint_id=${currentEndpoint}` : '/api/webhooks';
+            const data = await api('GET', url);
+            webhooks = data.webhooks;
+            renderWebhooks();
+        }
+
+        function renderWebhooks() {
+            const container = document.getElementById('webhooks-container');
+            let filtered = webhooks;
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                filtered = webhooks.filter(wh =>
+                    wh.method.toLowerCase().includes(term) ||
+                    wh.url.toLowerCase().includes(term) ||
+                    (wh.body && wh.body.toLowerCase().includes(term)) ||
+                    Object.entries(wh.headers).some(([k,v]) => k.toLowerCase().includes(term) || String(v).toLowerCase().includes(term))
+                );
+            }
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">📡</div>
+                        <div>${webhooks.length === 0 ? 'No webhooks captured yet.' : 'No webhooks match your search.'}</div>
+                        <div style="margin-top:0.5rem;font-size:0.9rem;">${webhooks.length === 0 ? 'Send a request to <code style="background:var(--bg-tertiary);padding:0.2rem 0.4rem;border-radius:4px;">/wh/' + (currentEndpoint || 'your-endpoint') + '</code>' : ''}</div>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map(wh => {
+                const methodClass = `method-${wh.method.toLowerCase()}` in {'method-get':1,'method-post':1,'method-put':1,'method-patch':1,'method-delete':1} ? `method-${wh.method.toLowerCase()}` : 'method-default';
+                const time = new Date(wh.received_at).toLocaleString();
+                const headers = JSON.stringify(wh.headers, null, 2);
+                const query = JSON.stringify(wh.query_params, null, 2);
+                const body = wh.body || '(no body)';
+                const analysis = wh.analysis
+                    ? `<div class="analysis-box">${escapeHtml(wh.analysis)}${wh.analysis_time_ms ? '<div style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-secondary);">⏱️ ' + wh.analysis_time_ms + 'ms</div>' : ''}</div>`
+                    : `<div class="analysis-box"><span class="loading">🤖 Analyzing with local model...</span></div>`;
+
+                const latencyBadge = wh.latency_ms !== undefined && wh.latency_ms !== null
+                    ? `<span class="badge" style="background:var(--bg-tertiary);">⚡ ${wh.latency_ms}ms</span>`
+                    : '';
+
+                const forwardStatus = wh.forward_status !== undefined && wh.forward_status !== null
+                    ? (wh.forward_status >= 200 && wh.forward_status < 300
+                        ? `<span class="badge" style="background:rgba(63,185,80,0.15);color:var(--success);">↗️ Forwarded (${wh.forward_status})</span>`
+                        : (wh.forward_status === 0
+                            ? `<span class="badge" style="background:rgba(248,81,73,0.15);color:var(--danger);">↗️ Forward Failed</span>`
+                            : `<span class="badge" style="background:rgba(210,153,34,0.15);color:var(--warning);">↗️ Forward ${wh.forward_status}</span>`))
+                    : '';
+
+                return `
+                <div class="webhook-card" id="wh-${wh.id}">
+                    <div class="webhook-header" onclick="toggleBody('${wh.id}')">
+                        ${bulkMode ? `<input type="checkbox" class="wh-checkbox" ${selectedWebhookIds.has(wh.id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleSelect('${escapeJs(wh.id)}')">` : ''}
+                        <span class="method ${methodClass}">${wh.method}</span>
+                        <span class="webhook-url">${escapeHtml(wh.url)}</span>
+                        ${latencyBadge}
+                        ${forwardStatus}
+                        <span class="webhook-time">${time}</span>
+                    </div>
+                    <div class="webhook-body" id="body-${wh.id}">
+                        <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;">
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); copyToClipboard('${escapeJs(wh.id)}')">📋 Copy cURL</button>
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); replayWebhook('${escapeJs(wh.id)}')">🔄 Replay</button>
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); verifySig('${escapeJs(wh.id)}')">🔐 Verify Sig</button>
+                            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteWebhook('${escapeJs(wh.id)}')">🗑️ Delete</button>
+                        </div>
+
+                        <div class="section-title">🧠 AI Analysis</div>
+                        ${analysis}
+
+                        <div class="section-title">Headers</div>
+                        <pre>${escapeHtml(headers)}</pre>
+
+                        <div class="section-title">Query Parameters</div>
+                        <pre>${escapeHtml(query)}</pre>
+
+                        <div class="section-title">Body</div>
+                        <pre>${escapeHtml(body)}</pre>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function toggleBody(id) {
+            const el = document.getElementById('body-' + id);
+            el.classList.toggle('open');
+        }
+
+        async function deleteWebhook(id) {
+            if (!confirm('Delete this webhook?')) return;
+            await api('DELETE', '/api/webhooks/' + id);
+            webhooks = webhooks.filter(w => w.id !== id);
+            renderWebhooks();
+        }
+
+        async function clearAll() {
+            if (!currentEndpoint) return;
+            if (!confirm('Clear all webhooks for this endpoint?')) return;
+            await api('DELETE', '/api/endpoints/' + currentEndpoint + '/webhooks');
+            webhooks = [];
+            renderWebhooks();
+        }
+
+        function copyToClipboard(id) {
+            const wh = webhooks.find(w => w.id === id);
+            if (!wh) return;
+            let curl = `curl -X ${wh.method} "${wh.url}"`;
+            Object.entries(wh.headers).forEach(([k,v]) => {
+                if (['host','content-length','connection','transfer-encoding'].includes(k.toLowerCase())) return;
+                curl += ` \\\n  -H "${k}: ${v.replace(/"/g, '\\"')}"`;
+            });
+            if (wh.query_params && Object.keys(wh.query_params).length > 0) {
+                // URL already includes query params
+            }
+            if (wh.body) {
+                curl += ` \\\n  -d '${wh.body.replace(/'/g, "'\\''")}'`;
+            }
+            navigator.clipboard.writeText(curl).then(() => {
+                alert('cURL copied to clipboard!');
+            });
+        }
+
+        let currentReplayId = null;
+
+        function replayWebhook(id) {
+            const wh = webhooks.find(w => w.id === id);
+            if (!wh) return;
+            currentReplayId = id;
+            document.getElementById('replay-url').value = wh.url;
+            document.getElementById('replay-body').value = wh.body || '';
+            document.getElementById('replay-modal').classList.add('open');
+        }
+
+        function closeModal() {
+            document.getElementById('replay-modal').classList.remove('open');
+            currentReplayId = null;
+        }
+
+        async function doReplay() {
+            if (!currentReplayId) { closeModal(); return; }
+            const url = document.getElementById('replay-url').value || undefined;
+            try {
+                const payload = url ? { url } : {};
+                const result = await api('POST', '/api/webhooks/' + currentReplayId + '/replay', payload);
+                alert(`Replayed to ${result.target_url}! Response status: ${result.response_status}`);
+                closeModal();
+            } catch (e) {
+                alert('Replay failed: ' + e);
+            }
+        }
+
+        // Verify signature
+        let currentVerifyId = null;
+
+        function verifySig(id) {
+            currentVerifyId = id;
+            document.getElementById('verify-stripe').value = '';
+            document.getElementById('verify-github').value = '';
+            document.getElementById('verify-shopify').value = '';
+            document.getElementById('verify-result').innerHTML = '';
+            document.getElementById('verify-modal').classList.add('open');
+        }
+
+        function closeVerifyModal() {
+            document.getElementById('verify-modal').classList.remove('open');
+            currentVerifyId = null;
+        }
+
+        async function doVerify() {
+            if (!currentVerifyId) return;
+            const secrets = {};
+            const stripe = document.getElementById('verify-stripe').value;
+            const github = document.getElementById('verify-github').value;
+            const shopify = document.getElementById('verify-shopify').value;
+            if (stripe) secrets.stripe = stripe;
+            if (github) secrets.github = github;
+            if (shopify) secrets.shopify = shopify;
+
+            try {
+                const result = await api('POST', '/api/webhooks/' + currentVerifyId + '/verify', { secrets });
+                const el = document.getElementById('verify-result');
+                if (result.verified) {
+                    el.innerHTML = `<span style="color:var(--success);">✅ ${result.provider} signature verified!</span>`;
+                } else {
+                    el.innerHTML = `<span style="color:var(--danger);">❌ ${result.error || 'Verification failed'}</span>`;
+                }
+            } catch (e) {
+                document.getElementById('verify-result').innerHTML = `<span style="color:var(--danger);">Error: ${e}</span>`;
+            }
+        }
+
+        // Config modal
+        async function openConfigModal() {
+            if (!currentEndpoint) return;
+            try {
+                const cfg = await api('GET', '/api/endpoints/' + currentEndpoint + '/config');
+                document.getElementById('config-status').value = cfg.status_code || 200;
+                document.getElementById('config-headers').value = JSON.stringify(cfg.response_headers || {}, null, 2);
+                document.getElementById('config-body').value = cfg.response_body || '';
+                document.getElementById('config-forward').value = cfg.forward_url || '';
+                document.getElementById('config-retention').value = cfg.retention_count || 0;
+                document.getElementById('config-filters').value = JSON.stringify(cfg.filter_rules || {}, null, 2);
+            } catch (e) {
+                document.getElementById('config-status').value = 200;
+                document.getElementById('config-headers').value = '{}';
+                document.getElementById('config-body').value = '';
+                document.getElementById('config-forward').value = '';
+                document.getElementById('config-retention').value = 0;
+                document.getElementById('config-filters').value = '{}';
+            }
+            document.getElementById('config-modal').classList.add('open');
+        }
+
+        function closeConfigModal() {
+            document.getElementById('config-modal').classList.remove('open');
+        }
+
+        async function saveConfig() {
+            if (!currentEndpoint) return;
+            let headers = {};
+            let filters = {};
+            try {
+                headers = JSON.parse(document.getElementById('config-headers').value);
+            } catch (e) {
+                alert('Invalid JSON in headers');
+                return;
+            }
+            try {
+                filters = JSON.parse(document.getElementById('config-filters').value);
+            } catch (e) {
+                alert('Invalid JSON in filter rules');
+                return;
+            }
+            const body = document.getElementById('config-body').value || null;
+            const statusCode = parseInt(document.getElementById('config-status').value, 10) || 200;
+            const forwardUrl = document.getElementById('config-forward').value || null;
+            const retention = parseInt(document.getElementById('config-retention').value, 10) || 0;
+            await api('PUT', '/api/endpoints/' + currentEndpoint + '/config', {
+                status_code: statusCode,
+                response_headers: headers,
+                response_body: body,
+                forward_url: forwardUrl,
+                retention_count: retention,
+                filter_rules: filters,
+            });
+            closeConfigModal();
+        }
+
+        function exportAll() {
+            const dataStr = JSON.stringify(webhooks, null, 2);
+            const blob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `webhooks-${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+        }
+
+        function exportCSV() {
+            const endpoint = currentEndpoint || '';
+            const url = '/api/webhooks/export?format=csv' + (endpoint ? '&endpoint_id=' + endpoint : '');
+            window.location.href = url;
+        }
+
+        // Test webhook modal
+        function openTestModal() {
+            document.getElementById('test-url').value = currentEndpoint ? window.location.origin + '/wh/' + currentEndpoint : '';
+            document.getElementById('test-method').value = 'POST';
+            document.getElementById('test-headers').value = '{"Content-Type":"application/json"}';
+            document.getElementById('test-body').value = '{"test": "hello"}';
+            document.getElementById('test-result').innerHTML = '';
+            document.getElementById('test-modal').classList.add('open');
+        }
+
+        function closeTestModal() {
+            document.getElementById('test-modal').classList.remove('open');
+        }
+
+        async function doTestWebhook() {
+            const url = document.getElementById('test-url').value;
+            const method = document.getElementById('test-method').value;
+            const body = document.getElementById('test-body').value;
+            let headers = {};
+            try {
+                headers = JSON.parse(document.getElementById('test-headers').value);
+            } catch (e) {
+                document.getElementById('test-result').innerHTML = '<span style="color:var(--danger);">Invalid headers JSON</span>';
+                return;
+            }
+            document.getElementById('test-result').innerHTML = '<span style="color:var(--text-secondary);">Sending...</span>';
+            try {
+                const result = await api('POST', '/api/test-webhook', { url, method, headers, body });
+                const statusColor = result.response_status >= 200 && result.response_status < 300 ? 'var(--success)' : 'var(--warning)';
+                document.getElementById('test-result').innerHTML = `<span style="color:${statusColor};">✅ ${result.response_status}</span> <span style="color:var(--text-secondary);font-size:0.75rem;">${escapeHtml(result.response_body.substring(0,200))}</span>`;
+            } catch (e) {
+                document.getElementById('test-result').innerHTML = '<span style="color:var(--danger);">Error: ' + escapeHtml(String(e)) + '</span>';
+            }
+        }
+
+        // Bulk mode
+        function toggleBulkMode() {
+            bulkMode = !bulkMode;
+            selectedWebhookIds.clear();
+            document.getElementById('bulk-bar').classList.toggle('open', bulkMode);
+            document.getElementById('bulk-btn').textContent = bulkMode ? '❌ Bulk' : '☑️ Bulk';
+            updateBulkCount();
+            renderWebhooks();
+        }
+
+        function toggleSelect(id) {
+            if (selectedWebhookIds.has(id)) {
+                selectedWebhookIds.delete(id);
+            } else {
+                selectedWebhookIds.add(id);
+            }
+            updateBulkCount();
+        }
+
+        function updateBulkCount() {
+            document.getElementById('bulk-count').textContent = selectedWebhookIds.size + ' selected';
+        }
+
+        async function deleteSelected() {
+            if (selectedWebhookIds.size === 0) return;
+            if (!confirm('Delete ' + selectedWebhookIds.size + ' webhooks?')) return;
+            for (const id of selectedWebhookIds) {
+                try { await api('DELETE', '/api/webhooks/' + id); } catch (e) {}
+            }
+            webhooks = webhooks.filter(w => !selectedWebhookIds.has(w.id));
+            selectedWebhookIds.clear();
+            updateBulkCount();
+            renderWebhooks();
+        }
+
+        // Bulk replay modal
+        function openBulkReplayModal() {
+            if (selectedWebhookIds.size === 0) return;
+            document.getElementById('bulk-replay-count').textContent = '(' + selectedWebhookIds.size + ' webhooks)';
+            document.getElementById('bulk-replay-url').value = '';
+            document.getElementById('bulk-replay-result').innerHTML = '';
+            document.getElementById('bulk-replay-modal').classList.add('open');
+        }
+
+        function closeBulkReplayModal() {
+            document.getElementById('bulk-replay-modal').classList.remove('open');
+        }
+
+        async function doBulkReplay() {
+            const ids = Array.from(selectedWebhookIds);
+            const url = document.getElementById('bulk-replay-url').value || null;
+            const resultEl = document.getElementById('bulk-replay-result');
+            resultEl.innerHTML = '<span style="color:var(--text-secondary);">Replaying...</span>';
+            try {
+                const result = await api('POST', '/api/bulk-replay', { webhook_ids: ids, url });
+                const ok = result.replayed;
+                const total = result.results.length;
+                resultEl.innerHTML = `<span style="color:var(--success);">✅ Replayed ${ok}/${total} successfully</span>`;
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">Error: ${e}</span>`;
+            }
+        }
+
+        // Stats
+        async function loadStats() {
+            try {
+                const data = await api('GET', '/api/stats');
+                document.getElementById('stats-panel').style.display = 'block';
+                document.getElementById('stats-total').textContent = data.total;
+                document.getElementById('stats-today').textContent = data.today;
+                const bars = document.getElementById('stats-bars');
+                if (data.hourly.length > 0) {
+                    const max = Math.max(...data.hourly.map(h => h.c));
+                    bars.innerHTML = data.hourly.map(h => {
+                        const pct = max > 0 ? (h.c / max) * 100 : 0;
+                        return `<div class="bar" style="height:${pct}%" title="${h.hour}: ${h.c}"></div>`;
+                    }).join('');
+                } else {
+                    bars.innerHTML = '<div style="font-size:0.75rem;color:var(--text-secondary);">No data yet</div>';
+                }
+            } catch (e) {
+                document.getElementById('stats-panel').style.display = 'none';
+            }
+        }
+
+        function refreshData() { loadWebhooks(); loadStats(); }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function escapeJs(str) {
+            return str.replace(/'/g, "\\'");
+        }
+
+        async function checkLLM() {
+            try {
+                const res = await fetch('/api/health');
+                const data = await res.json();
+                const badge = document.getElementById('llm-status');
+                badge.textContent = 'LLM: ' + (data.local_llm ? data.local_llm.split('/')[2] : 'unknown');
+            } catch (e) {
+                document.getElementById('llm-status').textContent = 'LLM: unknown';
+            }
+        }
+
+        // Search handler
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    searchTerm = e.target.value;
+                    renderWebhooks();
+                });
+            }
+        });
+
+        // Init
+        loadEndpoints();
+        loadStats();
+        checkLLM();
+        connectWebSocket();
+    </script>
+</body>
+</html>
