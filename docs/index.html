@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Webcatch — Self-hosted webhook inspector</title>
+<meta name="description" content="Self-hosted webhook capture, replay, and AI analysis. All data stays on your machine. No cloud. No telemetry.">
+<style>
+:root {
+    --bg: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-secondary: #8b949e;
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+    --success: #3fb950;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --radius: 10px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+
+/* Nav */
+nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.2rem 0; border-bottom: 1px solid var(--border);
+}
+.logo { font-size: 1.4rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem; }
+.nav-links { display: flex; gap: 1.5rem; align-items: center; font-size: 0.9rem; }
+.nav-links a { color: var(--text-secondary); }
+.nav-links a:hover { color: var(--text); }
+.btn {
+    background: var(--accent); color: #000; border: none; padding: 0.6rem 1.2rem;
+    border-radius: var(--radius); font-weight: 600; cursor: pointer; font-size: 0.9rem;
+    display: inline-block; transition: background 0.15s;
+}
+.btn:hover { background: var(--accent-hover); text-decoration: none; }
+.btn-outline {
+    background: transparent; color: var(--text); border: 1px solid var(--border);
+}
+.btn-outline:hover { background: var(--bg-tertiary); }
+
+/* Hero */
+.hero {
+    text-align: center; padding: 6rem 1rem 4rem;
+    background: radial-gradient(ellipse at 50% 0%, rgba(88,166,255,0.08) 0%, transparent 60%);
+}
+.hero h1 {
+    font-size: 3.2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;
+    margin-bottom: 1rem;
+}
+.hero h1 span { color: var(--accent); }
+.hero p { font-size: 1.25rem; color: var(--text-secondary); max-width: 620px; margin: 0 auto 2rem; }
+.hero-btns { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+.hero-btns .btn { font-size: 1rem; padding: 0.8rem 1.6rem; }
+.hero-sub { margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); }
+
+/* Terminal */
+.terminal {
+    max-width: 720px; margin: 3rem auto 0; background: var(--bg-secondary);
+    border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 0.85rem;
+    text-align: left; box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+.terminal-header {
+    background: var(--bg-tertiary); padding: 0.6rem 1rem; display: flex; gap: 0.4rem;
+    align-items: center; border-bottom: 1px solid var(--border);
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot-r { background: #ff5f56; } .dot-y { background: #ffbd2e; } .dot-g { background: #27c93f; }
+.terminal-body { padding: 1.2rem 1.5rem; color: var(--text); line-height: 1.7; }
+.terminal-body .comment { color: var(--text-secondary); }
+.terminal-body .cmd { color: var(--accent); }
+.terminal-body .out { color: var(--success); }
+
+/* Features */
+.features { padding: 5rem 0; }
+.features h2 { text-align: center; font-size: 2rem; margin-bottom: 3rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+.feature-card {
+    background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1.8rem; transition: border-color 0.2s, transform 0.2s;
+}
+.feature-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.feature-card .icon { font-size: 1.8rem; margin-bottom: 0.8rem; }
+.feature-card h3 { font-size: 1.1rem; margin-bottom: 0.4rem; }
+.feature-card p { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; }
+
+/* Comparison */
+.compare { padding: 5rem 0; background: var(--bg-secondary); border-top: 1px solid var(--border); }
+.compare h2 { text-align: center; font-size: 2rem; margin-bottom: 3rem; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { padding: 0.9rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+th { color: var(--text-secondary); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+tr:hover { background: rgba(88,166,255,0.03); }
+.check { color: var(--success); font-weight: 700; }
+.cross { color: var(--text-secondary); }
+.highlight { color: var(--accent); font-weight: 700; }
+
+/* Pricing */
+.pricing { padding: 5rem 0; }
+.pricing h2 { text-align: center; font-size: 2rem; margin-bottom: 3rem; }
+.pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; max-width: 700px; margin: 0 auto; }
+.price-card {
+    background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 2rem; text-align: center;
+}
+.price-card.pro { border-color: var(--accent); background: linear-gradient(180deg, rgba(88,166,255,0.06), transparent); }
+.price-card h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+.price-card .price { font-size: 2.5rem; font-weight: 800; margin: 1rem 0; }
+.price-card .price span { font-size: 0.9rem; font-weight: 400; color: var(--text-secondary); }
+.price-card ul { list-style: none; text-align: left; margin: 1.5rem 0; }
+.price-card li { padding: 0.4rem 0; font-size: 0.9rem; color: var(--text-secondary); }
+.price-card li::before { content: "✓ "; color: var(--success); }
+
+/* CTA */
+.cta {
+    text-align: center; padding: 5rem 1rem;
+    background: radial-gradient(ellipse at 50% 100%, rgba(88,166,255,0.06) 0%, transparent 60%);
+    border-top: 1px solid var(--border);
+}
+.cta h2 { font-size: 2rem; margin-bottom: 1rem; }
+.cta p { color: var(--text-secondary); margin-bottom: 2rem; }
+
+/* Footer */
+footer { text-align: center; padding: 2.5rem 1rem; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 0.85rem; }
+footer a { color: var(--text-secondary); }
+
+@media (max-width: 600px) {
+    .hero h1 { font-size: 2.2rem; }
+    .hero p { font-size: 1rem; }
+    .nav-links { display: none; }
+}
+</style>
+</head>
+<body>
+
+<nav class="container">
+    <div class="logo">🔍 Webcatch</div>
+    <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#compare">Compare</a>
+        <a href="#pricing">Pricing</a>
+        <a href="https://github.com/bellum19/webcatch">GitHub</a>
+        <a href="https://github.com/bellum19/webcatch" class="btn">Get Started</a>
+    </div>
+</nav>
+
+<section class="hero">
+    <div class="container">
+        <h1>Inspect webhooks<br><span>without sending them to the cloud.</span></h1>
+        <p>Self-hosted webhook capture, replay, and AI analysis. One command. Zero data leaves your machine.</p>
+        <div class="hero-btns">
+            <a href="https://github.com/bellum19/webcatch" class="btn">⭐ Star on GitHub</a>
+            <a href="#install" class="btn btn-outline">📥 Install</a>
+        </div>
+        <div class="hero-sub">MIT License · Docker-ready · No sign-up required</div>
+    </div>
+
+    <div class="terminal">
+        <div class="terminal-header"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span></div>
+        <div class="terminal-body">
+<span class="comment"># One command to self-host</span><br>
+<span class="cmd">$</span> docker run -p 9120:9120 ghcr.io/bellum19/webcatch<br>
+<br>
+<span class="comment"># Your webhook URL is ready</span><br>
+<span class="out">✓</span> Listening on http://localhost:9120/wh/abc123<br>
+<span class="out">✓</span> Dashboard at http://localhost:9120<br>
+<span class="out">✓</span> AI analysis via local LLM (optional)
+        </div>
+    </div>
+</section>
+
+<section class="features" id="features">
+    <div class="container">
+        <h2>Everything you need. Nothing you don't.</h2>
+        <div class="grid">
+            <div class="feature-card">
+                <div class="icon">🔒</div>
+                <h3>Privacy-first</h3>
+                <p>SQLite storage. No telemetry. No cloud lock-in. Your webhook payloads never leave your server.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🔄</div>
+                <h3>Replay &amp; Proxy</h3>
+                <p>Resend any webhook with one click. Forward to backends. Transform payloads with Python scripts.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🧠</div>
+                <h3>AI Analysis</h3>
+                <p>Auto-analyze payloads with your local LLM (Ollama, llama.cpp, etc.). Understand errors at a glance.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🧬</div>
+                <h3>Schema Inference</h3>
+                <p>Automatically infer JSON schemas from your webhook history. Validate new payloads and export OpenAPI docs.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">⚙️</div>
+                <h3>Custom Responses</h3>
+                <p>Return custom status codes, headers, and bodies. Filter by method, header, or body content.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">📱</div>
+                <h3>Real-time Dashboard</h3>
+                <p>WebSocket-powered live updates. Search, diff, export to Postman or cURL. All in a clean dark UI.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="compare" id="compare">
+    <div class="container">
+        <h2>Compare</h2>
+        <table>
+            <thead>
+                <tr><th>Feature</th><th>Webcatch</th><th>Hookdeck</th><th>Svix</th><th>Webhook.site</th><th>ngrok</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Self-hosted</td><td class="highlight">✓ Open source</td><td class="cross">✗ Cloud only</td><td class="cross">✗ Cloud only</td><td class="cross">✗ Cloud only</td><td class="cross">✗ Cloud only</td></tr>
+                <tr><td>Data stays local</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+                <tr><td>Webhook replay</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+                <tr><td>Payload transformation</td><td class="check">✓ Python scripts</td><td class="check">✓</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+                <tr><td>AI analysis</td><td class="check">✓ Local LLM</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+                <tr><td>Schema inference</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+                <tr><td>Signature verification</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+                <tr><td>Postman / cURL export</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+                <tr><td>Pricing</td><td class="highlight">Free / $39 lifetime</td><td>$25+/mo</td><td>$100+/mo</td><td>Free / Pro</td><td>Free / Pro</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="pricing" id="pricing">
+    <div class="container">
+        <h2>Simple pricing</h2>
+        <div class="pricing-grid">
+            <div class="price-card">
+                <h3>Free</h3>
+                <div class="price">$0</div>
+                <ul>
+                    <li>Unlimited endpoints</li>
+                    <li>Real-time dashboard</li>
+                    <li>Replay &amp; forwarding</li>
+                    <li>AI analysis (local LLM)</li>
+                    <li>Schema inference</li>
+                    <li>Signature verification</li>
+                    <li>100 recent webhooks</li>
+                </ul>
+                <a href="https://github.com/bellum19/webcatch" class="btn btn-outline" style="width:100%;">Download</a>
+            </div>
+            <div class="price-card pro">
+                <h3>Pro</h3>
+                <div class="price">$39 <span>lifetime</span></div>
+                <ul>
+                    <li>Everything in Free</li>
+                    <li>Unlimited history</li>
+                    <li>Custom responses</li>
+                    <li>Bulk replay</li>
+                    <li>Team sharing (up to 5)</li>
+                    <li>Priority support</li>
+                </ul>
+                <a href="https://github.com/bellum19/webcatch#pricing" class="btn" style="width:100%;">Buy Pro</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="cta" id="install">
+    <div class="container">
+        <h2>Ready to own your webhooks?</h2>
+        <p>One Docker command. No accounts. No cloud. Your data, your server.</p>
+        <a href="https://github.com/bellum19/webcatch" class="btn">⭐ Star on GitHub &amp; Get Started</a>
+    </div>
+</section>
+
+<footer>
+    <div class="container">
+        <p>Built by <a href="https://github.com/bellum19">@bellum19</a> · <a href="https://github.com/bellum19/webcatch">GitHub</a> · MIT License</p>
+    </div>
+</footer>
+
+</body>
+</html>
