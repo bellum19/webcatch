@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 import storage
 import inspector
 import schema_engine
+import auth
 
 
 import stripe
@@ -90,6 +91,79 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Webhook Inspector", version="0.5.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(APP_DIR, "static")), name="static")
+
+# Auth middleware: protect everything except webhook capture and whitelisted public routes
+_AUTH_WHITELIST = {
+    "/api/health",
+    "/api/login",
+    "/api/logout",
+    "/api/checkout",
+    "/api/license/validate",
+    "/success",
+    "/stripe/webhook",
+}
+
+LOGIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — Webcatch</title>
+<style>
+body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 2.5rem; width: 100%; max-width: 360px; text-align: center; }
+h1 { color: #58a6ff; margin-bottom: 0.5rem; font-size: 1.5rem; }
+p { color: #8b949e; font-size: 0.9rem; margin-bottom: 1.5rem; }
+input { width: 100%; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 0.7rem; border-radius: 8px; font-size: 0.95rem; margin-bottom: 1rem; box-sizing: border-box; }
+input:focus { outline: none; border-color: #58a6ff; }
+button { width: 100%; background: #58a6ff; color: #000; border: none; padding: 0.7rem; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; }
+button:hover { background: #79c0ff; }
+#error { color: #f85149; font-size: 0.85rem; margin-top: 0.75rem; display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+<h1>🔒 Webcatch</h1>
+<p>Enter your admin password to continue.</p>
+<input type="password" id="pw" placeholder="Password" autofocus onkeydown="if(event.key==='Enter')doLogin()">
+<button onclick="doLogin()">Sign In</button>
+<div id="error"></div>
+</div>
+<script>
+async function doLogin() {
+    const pw = document.getElementById('pw').value;
+    const err = document.getElementById('error');
+    try {
+        const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({password: pw}) });
+        const data = await res.json();
+        if (data.authenticated) { window.location.href = '/dashboard'; }
+        else { err.textContent = data.message || 'Invalid password'; err.style.display = 'block'; }
+    } catch (e) { err.textContent = 'Network error'; err.style.display = 'block'; }
+}
+</script>
+</body>
+</html>"""
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    # Always allow webhook capture endpoints
+    if path.startswith("/wh/"):
+        return await call_next(request)
+    # Allow static files
+    if path.startswith("/static/"):
+        return await call_next(request)
+    # Allow whitelisted routes
+    if path in _AUTH_WHITELIST:
+        return await call_next(request)
+    # Check auth
+    if not auth.is_authenticated(request):
+        accept = request.headers.get("accept", "")
+        if "text/html" in accept:
+            return HTMLResponse(LOGIN_HTML, status_code=401)
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    return await call_next(request)
 
 
 # ---------------------------------------------------------------------------
@@ -987,6 +1061,12 @@ async def verify_webhook_sig(webhook_id: str, request: Request):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    # Auth check for WebSocket
+    if auth.AUTH_ENABLED:
+        cookie = websocket.cookies.get(auth._COOKIE_NAME, "")
+        if not cookie or not auth._verify_cookie_value(cookie):
+            await websocket.close(code=1008, reason="Authentication required")
+            return
     await manager.connect(websocket)
     try:
         while True:
@@ -1010,6 +1090,18 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "0.5.0", "local_llm": inspector.LOCAL_LLM_URL}
+
+
+@app.post("/api/login")
+async def api_login(request: Request):
+    data = await request.json()
+    password = data.get("password", "")
+    return auth.login_response(password)
+
+
+@app.post("/api/logout")
+async def api_logout():
+    return auth.logout_response()
 
 
 if __name__ == "__main__":

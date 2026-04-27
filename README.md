@@ -72,10 +72,13 @@ Create a `.env` file:
 INSPECTOR_PORT=9120
 INSPECTOR_HOST=0.0.0.0
 
+# Auth (optional — protects dashboard & API, leaves webhook capture open)
+WEBCATCH_PASSWORD=your-secure-password
+
 # Stripe (optional, for Pro license sales)
-STRIPE_SECRET_KEY=sk_...
+STRIPE_SECRET_KEY=***
 STRIPE_PUBLISHABLE_KEY=pk_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_WEBHOOK_SECRET=***
 SUCCESS_URL=https://yourdomain.com/success?session_id={CHECKOUT_SESSION_ID}
 CANCEL_URL=https://yourdomain.com/
 
@@ -83,6 +86,17 @@ CANCEL_URL=https://yourdomain.com/
 LOCAL_LLM_URL=http://127.0.0.1:8081/v1/chat/completions
 LOCAL_LLM_MODEL=qwen-local
 ```
+
+---
+
+## Authentication
+
+Set `WEBCATCH_PASSWORD` to password-protect the dashboard and all API routes. Webhook capture URLs (`/wh/{id}`) remain **publicly accessible** so external services can still deliver webhooks.
+
+- If `WEBCATCH_PASSWORD` is **not set**, everything is open (backward compatible).
+- If set, visiting `/` or `/dashboard` presents a login page.
+- Session cookies expire after 30 days.
+- The logout button is in the top-right of the dashboard.
 
 ---
 
