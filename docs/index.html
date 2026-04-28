@@ -271,7 +271,18 @@ footer a { color: var(--text-secondary); }
                     <li>Team sharing (up to 5)</li>
                     <li>Priority support</li>
                 </ul>
-                <a href="https://github.com/bellum19/webcatch#pricing" class="btn" style="width:100%;">Buy Pro</a>
+                <a href="#" onclick="buyPro(event)" class="btn" style="width:100%;">Buy Pro</a>
+                <script>
+                async function buyPro(e) {
+                    e.preventDefault();
+                    try {
+                        const res = await fetch('/api/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                        const data = await res.json();
+                        if (data.url) { window.location.href = data.url; }
+                        else { alert('Checkout error: ' + (data.error || 'Unknown')); }
+                    } catch (err) { alert('Network error: ' + err.message); }
+                }
+                </script>
             </div>
         </div>
     </div>
