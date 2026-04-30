@@ -47,6 +47,8 @@ CANCEL_URL = os.getenv("CANCEL_URL", "https://webcatch.dev/")
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PORT = int(os.getenv("INSPECTOR_PORT", "9120"))
 HOST = os.getenv("INSPECTOR_HOST", "0.0.0.0")
+ANALYZE_ON_CAPTURE = os.getenv("WEBCATCH_ANALYZE_ON_CAPTURE", "false").lower() in {"1", "true", "yes", "on"}
+LLM_ANALYSIS_CONCURRENCY = int(os.getenv("WEBCATCH_LLM_CONCURRENCY", "1"))
 
 # Track active endpoints in memory (endpoint_id → created_at)
 active_endpoints: dict[str, str] = {}
@@ -76,6 +78,7 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+analysis_semaphore = asyncio.Semaphore(LLM_ANALYSIS_CONCURRENCY)
 
 
 @asynccontextmanager
@@ -312,11 +315,13 @@ async def capture_webhook(endpoint_id: str, request: Request):
     if config and config.get("retention_count"):
         storage.apply_retention(endpoint_id, config["retention_count"])
 
-    # Fire-and-forget LLM analysis with timing
+    # Optional fire-and-forget LLM analysis with timing. Disabled by default so
+    # high webhook volume does not overwhelm a small local model.
     body_text = body.decode("utf-8", errors="replace") if body else None
-    asyncio.create_task(
-        _analyze_and_store(webhook_id, request.method, str(request.url), headers, body_text, query_params)
-    )
+    if ANALYZE_ON_CAPTURE:
+        asyncio.create_task(
+            _analyze_and_store(webhook_id, request.method, str(request.url), headers, body_text, query_params)
+        )
 
     # Fire-and-forget schema inference + validation
     if body_text:
@@ -380,7 +385,8 @@ async def _analyze_and_store(
     """Background task: run local LLM analysis and store result."""
     start = time.time()
     try:
-        analysis = await inspector.analyze_webhook(method, url, headers, body, query_params)
+        async with analysis_semaphore:
+            analysis = await inspector.analyze_webhook(method, url, headers, body, query_params)
         elapsed_ms = (time.time() - start) * 1000
         storage.update_analysis(webhook_id, analysis, analysis_time_ms=round(elapsed_ms, 2))
         # Broadcast analysis update
@@ -573,38 +579,6 @@ async def _forward_webhook(
             })
 
 
-async def _analyze_and_store(
-    webhook_id: str,
-    method: str,
-    url: str,
-    headers: dict,
-    body: Optional[str],
-    query_params: dict,
-) -> None:
-    """Background task: run local LLM analysis and store result."""
-    start = time.time()
-    try:
-        analysis = await inspector.analyze_webhook(method, url, headers, body, query_params)
-        elapsed_ms = (time.time() - start) * 1000
-        storage.update_analysis(webhook_id, analysis, analysis_time_ms=round(elapsed_ms, 2))
-        # Broadcast analysis update
-        await manager.broadcast({
-            "type": "analysis_update",
-            "webhook_id": webhook_id,
-            "analysis": analysis,
-            "analysis_time_ms": round(elapsed_ms, 2),
-        })
-    except Exception as e:
-        elapsed_ms = (time.time() - start) * 1000
-        storage.update_analysis(webhook_id, f"Analysis failed: {e}", analysis_time_ms=round(elapsed_ms, 2))
-        await manager.broadcast({
-            "type": "analysis_update",
-            "webhook_id": webhook_id,
-            "analysis": f"Analysis failed: {e}",
-            "analysis_time_ms": round(elapsed_ms, 2),
-        })
-
-
 # ---------------------------------------------------------------------------
 # API: Export webhooks (must be before /api/webhooks/{webhook_id})
 # ---------------------------------------------------------------------------
@@ -761,6 +735,22 @@ async def get_webhook(webhook_id: str):
     wh["headers"] = json.loads(wh["headers"]) if wh["headers"] else {}
     wh["query_params"] = json.loads(wh["query_params"]) if wh["query_params"] else {}
     return wh
+
+
+@app.post("/api/webhooks/{webhook_id}/analyze")
+async def analyze_webhook_now(webhook_id: str):
+    wh = storage.get_webhook(webhook_id)
+    if not wh:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    headers = json.loads(wh["headers"]) if wh["headers"] else {}
+    query_params = json.loads(wh["query_params"]) if wh["query_params"] else {}
+    await _analyze_and_store(webhook_id, wh["method"], wh["url"], headers, wh["body"], query_params)
+    updated = storage.get_webhook(webhook_id)
+    return {
+        "webhook_id": webhook_id,
+        "analysis": updated.get("analysis") if updated else None,
+        "analysis_time_ms": updated.get("analysis_time_ms") if updated else None,
+    }
 
 
 @app.get("/api/webhooks/{webhook_id}/export")
@@ -1089,7 +1079,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "0.5.0", "local_llm": inspector.LOCAL_LLM_URL}
+    return {
+        "status": "ok",
+        "version": "0.5.0",
+        "local_llm": inspector.LOCAL_LLM_URL,
+        "analyze_on_capture": ANALYZE_ON_CAPTURE,
+        "llm_analysis_concurrency": LLM_ANALYSIS_CONCURRENCY,
+    }
 
 
 @app.post("/api/login")
@@ -1103,10 +1099,6 @@ async def api_login(request: Request):
 async def api_logout():
     return auth.logout_response()
 
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host=HOST, port=PORT, reload=True)
 
 # ---------------------------------------------------------------------------
 # Stripe Checkout & License
@@ -1122,7 +1114,7 @@ async def create_checkout():
             line_items=[{
                 "price_data": {
                     "currency": "usd",
-                    "product_data": {"name": "Webcatch Pro License", "description": "Lifetime self-hosted Pro license"},
+                    "product_data": {"name": "Webcatch Supporter License", "description": "Lifetime supporter license with priority help"},
                     "unit_amount": 3900,
                 },
                 "quantity": 1,
@@ -1145,25 +1137,23 @@ async def checkout_success(session_id: str = None):
         if sess.payment_status != "paid":
             return "<h1>Payment not completed</h1><p>If you believe this is an error, contact support.</p>"
         
-        # Check if we already generated a license for this session
-        # (In a real app you'd query by stripe_session_id; here we generate fresh each time for simplicity)
         lic_key = license.create_license(
             email=sess.customer_details.email if sess.customer_details else None,
             stripe_session_id=session_id
         )
         
         return f"""<!DOCTYPE html>
-<html><head><title>Webcatch Pro — Success</title>
+<html><head><title>Webcatch Supporter — Success</title>
 <style>
 body {{ background: #0d1117; color: #c9d1d9; font-family: sans-serif; text-align: center; padding: 80px 20px; }}
 h1 {{ color: #58a6ff; }} .key {{ background: #161b22; border: 1px solid #30363d; padding: 16px 24px; border-radius: 8px;
 font-family: monospace; font-size: 1.1rem; color: #3fb950; margin: 20px auto; display: inline-block; }}
 .btn {{ background: #58a6ff; color: #0d1117; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block; margin-top: 20px; }}
 </style></head><body>
-<h1>🎉 Welcome to Webcatch Pro!</h1>
-<p>Your payment was successful. Here is your license key:</p>
+<h1>🎉 Thanks for supporting Webcatch!</h1>
+<p>Your payment was successful. Here is your supporter license key:</p>
 <div class="key">{lic_key}</div>
-<p>Copy this key and paste it into your self-hosted Webcatch app under Settings → License.</p>
+<p>Keep this key for priority support.</p>
 <a href="/dashboard" class="btn">Open Webcatch</a>
 </body></html>"""
     except Exception as e:
@@ -1202,3 +1192,7 @@ async def stripe_webhook(request: Request):
             )
     return {"status": "ok"}
 
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host=HOST, port=PORT, reload=True)

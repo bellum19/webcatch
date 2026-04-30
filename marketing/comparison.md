@@ -26,12 +26,12 @@ Every other webhook tool sends your data to their cloud. Webcatch doesn't. It's 
 | **Custom responses** | ✅ Status, headers, body | ✅ Yes | ✅ Yes | ✅ Limited | ❌ No |
 | **Filter rules** | ✅ Method, header, body | ✅ Yes | ✅ Yes | ❌ No | ❌ No |
 | **Retention limits** | ✅ Configurable | ❌ No | ❌ No | ❌ No | ❌ No |
-| **Bulk replay** | ✅ Pro | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Bulk replay** | ✅ | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Real-time dashboard** | ✅ WebSocket | ✅ Yes | ✅ Yes | ❌ Polling | ❌ CLI only |
 | **Webhook diff** | ✅ Side-by-side | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Search** | ✅ Full-text | ✅ Yes | ✅ Yes | ❌ No | ❌ No |
-| **Team sharing** | ✅ Up to 5 (Pro) | ✅ Paid plans | ✅ Enterprise | ❌ No | ❌ No |
-| **Pricing** | **Free / $39 lifetime** | $25+/mo | $100+/mo | Free / Pro | Free / Pro |
+| **Team sharing** | ❌ Not yet | ✅ Paid plans | ✅ Enterprise | ❌ No | ❌ No |
+| **Pricing** | **MIT / optional $39 supporter license** | $25+/mo | $100+/mo | Free / Pro | Free / Pro |
 | **Telemetry** | ✅ None | ❌ Yes | ❌ Yes | ❌ Yes | ❌ Yes |
 | **Offline capable** | ✅ Yes | ❌ No | ❌ No | ❌ No | ❌ No |
 
@@ -42,7 +42,7 @@ Every other webhook tool sends your data to their cloud. Webcatch doesn't. It's 
 **Use Webcatch when:**
 - You care about privacy (healthcare, fintech, legal)
 - You want to self-host for compliance (GDPR, HIPAA, SOC2)
-- You have a local LLM and want AI analysis without API keys
+- You have a local LLM and want schema/payload analysis without API keys
 - You want schema inference and OpenAPI export
 - You hate monthly subscriptions
 - You want everything in one container

@@ -599,6 +599,7 @@
         let searchTerm = '';
         let bulkMode = false;
         let selectedWebhookIds = new Set();
+        let analyzeOnCapture = false;
 
         async function api(method, path, body) {
             const opts = { method, headers: {} };
@@ -779,7 +780,9 @@
                 const body = wh.body || '(no body)';
                 const analysis = wh.analysis
                     ? `<div class="analysis-box">${escapeHtml(wh.analysis)}${wh.analysis_time_ms ? '<div style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-secondary);">⏱️ ' + wh.analysis_time_ms + 'ms</div>' : ''}</div>`
-                    : `<div class="analysis-box"><span class="loading">🤖 Analyzing with local model...</span></div>`;
+                    : (analyzeOnCapture
+                        ? `<div class="analysis-box"><span class="loading">🤖 Analyzing with local model...</span></div>`
+                        : `<div class="analysis-box"><span style="color:var(--text-secondary);">Local LLM analysis is ready when you need it.</span> <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); analyzeWebhook('${escapeJs(wh.id)}')">🧠 Analyze</button></div>`);
 
                 const latencyBadge = wh.latency_ms !== undefined && wh.latency_ms !== null
                     ? `<span class="badge" style="background:var(--bg-tertiary);">⚡ ${wh.latency_ms}ms</span>`
@@ -845,6 +848,28 @@
             await api('DELETE', '/api/webhooks/' + id);
             webhooks = webhooks.filter(w => w.id !== id);
             renderWebhooks();
+        }
+
+        async function analyzeWebhook(id) {
+            const wh = webhooks.find(w => w.id === id);
+            if (wh) {
+                wh.analysis = 'Analyzing with local model...';
+                renderWebhooks();
+            }
+            try {
+                const result = await api('POST', '/api/webhooks/' + id + '/analyze');
+                if (wh) {
+                    wh.analyzed = 1;
+                    wh.analysis = result.analysis;
+                    wh.analysis_time_ms = result.analysis_time_ms;
+                    renderWebhooks();
+                }
+            } catch (e) {
+                if (wh) {
+                    wh.analysis = 'Analysis failed: ' + e;
+                    renderWebhooks();
+                }
+            }
         }
 
         async function clearAll() {
@@ -1221,8 +1246,10 @@
             try {
                 const res = await fetch('/api/health');
                 const data = await res.json();
+                analyzeOnCapture = !!data.analyze_on_capture;
                 const badge = document.getElementById('llm-status');
-                badge.textContent = 'LLM: ' + (data.local_llm ? data.local_llm.split('/')[2] : 'unknown');
+                const host = data.local_llm ? data.local_llm.split('/')[2] : 'unknown';
+                badge.textContent = 'LLM: ' + host + (analyzeOnCapture ? ' auto' : ' on-demand');
             } catch (e) {
                 document.getElementById('llm-status').textContent = 'LLM: unknown';
             }

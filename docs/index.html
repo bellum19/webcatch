@@ -160,7 +160,7 @@ footer a { color: var(--text-secondary); }
 <section class="hero">
     <div class="container">
         <h1>Inspect webhooks<br><span>without sending them to the cloud.</span></h1>
-        <p>Self-hosted webhook capture, replay, and AI analysis. One command. Zero data leaves your machine.</p>
+        <p>Self-hosted webhook capture, replay, schema inference, and local LLM analysis. One command. Zero data leaves your machine.</p>
         <div class="hero-btns">
             <a href="https://github.com/bellum19/webcatch" class="btn">⭐ Star on GitHub</a>
             <a href="#install" class="btn btn-outline">📥 Install</a>
@@ -199,7 +199,7 @@ footer a { color: var(--text-secondary); }
             <div class="feature-card">
                 <div class="icon">🧠</div>
                 <h3>AI Analysis</h3>
-                <p>Auto-analyze payloads with your local LLM (Ollama, llama.cpp, etc.). Understand errors at a glance.</p>
+                <p>Analyze payloads with your local LLM (Ollama, llama.cpp, vLLM, etc.). Understand schemas and failures without API keys.</p>
             </div>
             <div class="feature-card">
                 <div class="icon">🧬</div>
@@ -236,7 +236,7 @@ footer a { color: var(--text-secondary); }
                 <tr><td>Schema inference</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
                 <tr><td>Signature verification</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td></tr>
                 <tr><td>Postman / cURL export</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
-                <tr><td>Pricing</td><td class="highlight">Free / $39 lifetime</td><td>$25+/mo</td><td>$100+/mo</td><td>Free / Pro</td><td>Free / Pro</td></tr>
+                <tr><td>Pricing</td><td class="highlight">MIT / optional paid support</td><td>$25+/mo</td><td>$100+/mo</td><td>Free / Pro</td><td>Free / Pro</td></tr>
             </tbody>
         </table>
     </div>
@@ -244,34 +244,32 @@ footer a { color: var(--text-secondary); }
 
 <section class="pricing" id="pricing">
     <div class="container">
-        <h2>Simple pricing</h2>
+        <h2>Open source first</h2>
         <div class="pricing-grid">
             <div class="price-card">
-                <h3>Free</h3>
+                <h3>Open Source</h3>
                 <div class="price">$0</div>
                 <ul>
                     <li>Unlimited endpoints</li>
                     <li>Real-time dashboard</li>
-                    <li>Replay &amp; forwarding</li>
+                    <li>Replay, bulk replay, and forwarding</li>
                     <li>AI analysis (local LLM)</li>
                     <li>Schema inference</li>
                     <li>Signature verification</li>
-                    <li>100 recent webhooks</li>
+                    <li>Configurable retention</li>
                 </ul>
                 <a href="https://github.com/bellum19/webcatch" class="btn btn-outline" style="width:100%;">Download</a>
             </div>
             <div class="price-card pro">
-                <h3>Pro</h3>
+                <h3>Supporter</h3>
                 <div class="price">$39 <span>lifetime</span></div>
                 <ul>
-                    <li>Everything in Free</li>
-                    <li>Unlimited history</li>
-                    <li>Custom responses</li>
-                    <li>Bulk replay</li>
-                    <li>Team sharing (up to 5)</li>
-                    <li>Priority support</li>
+                    <li>Everything in open source</li>
+                    <li>Support ongoing development</li>
+                    <li>Priority help by email</li>
+                    <li>Early feedback on roadmap</li>
                 </ul>
-                <a href="#" onclick="buyPro(event)" class="btn" style="width:100%;">Buy Pro</a>
+                <a href="#" onclick="buyPro(event)" class="btn" style="width:100%;">Buy Supporter License</a>
                 <script>
                 async function buyPro(e) {
                     e.preventDefault();

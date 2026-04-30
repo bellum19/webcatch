@@ -3,16 +3,22 @@ Webhook storage layer — SQLite-backed, zero-config.
 """
 
 import json
+import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-DB_PATH = Path(__file__).parent / "webhooks.db"
+DATA_DIR = Path(__file__).parent / "data"
+DB_PATH = Path(os.getenv("WEBCATCH_DB_PATH", DATA_DIR / "webhooks.db"))
+LEGACY_DB_PATH = Path(__file__).parent / "webhooks.db"
 
 
 def _get_conn() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if DB_PATH != LEGACY_DB_PATH and not DB_PATH.exists() and LEGACY_DB_PATH.exists():
+        DB_PATH.write_bytes(LEGACY_DB_PATH.read_bytes())
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn

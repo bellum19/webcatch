@@ -23,7 +23,7 @@ Webcatch is a single Docker container that captures, replays, and analyzes webho
 
 **Tech stack:** FastAPI, SQLite, vanilla JS, WebSocket. No build step. One container.
 
-**Pricing:** Free (100 recent webhooks) or $39 lifetime Pro (unlimited history, bulk replay, team sharing up to 5).
+**Pricing:** MIT licensed. Optional $39 supporter license for priority help.
 
 MIT licensed. GitHub: https://github.com/bellum19/webcatch
 
@@ -50,7 +50,7 @@ So I built **Webcatch** — a webhook inspector that runs entirely on your machi
 - **Replay & proxy:** Resend any webhook, forward to your backend, transform payloads with a Python script before forwarding.
 - **One container:** FastAPI + vanilla JS. No build step. No dependencies beyond Docker.
 
-**Monetization:** $39 lifetime Pro license. No recurring revenue — I know, I know 😅 — but I wanted something I’d actually buy. If it grows I might add team/enterprise tiers.
+**Monetization:** $39 supporter license. No recurring revenue — I know, I know 😅 — but I wanted something I’d actually buy. If it grows I might add team/enterprise tiers.
 
 **Stack:** Python, FastAPI, SQLite, vanilla JS, WebSocket.
 
@@ -80,7 +80,7 @@ I built a webhook capture tool that runs in a single Docker container. Everythin
 - Webhook diff
 - Custom responses, filter rules, retention limits
 
-Free / $39 lifetime Pro.
+MIT licensed; optional $39 supporter license.
 
 GitHub: https://github.com/bellum19/webcatch
 
@@ -103,7 +103,7 @@ Introducing Webcatch — self-hosted webhook capture, replay, and AI analysis. O
 What it does:
 🔒 Capture any webhook instantly
 🔄 Replay with one click
-🧠 AI analysis (local LLM, no API keys)
+🧠 Local LLM analysis (no API keys)
 🧬 Auto schema inference + validation
 📄 Export Postman / cURL / CSV
 ⚖️ Verify Stripe/GitHub/Shopify signatures
@@ -113,7 +113,7 @@ Stack: FastAPI + SQLite + vanilla JS.
 
 No build step. No dependencies. One container.
 
-MIT licensed. Free or $39 lifetime Pro.
+MIT licensed. Optional $39 supporter license for priority help.
 
 **Tweet 4 (CTA):**
 If you debug webhooks and care about privacy, this is for you.
@@ -158,7 +158,7 @@ It's called Webcatch. One Docker command and you have:
 - Instant webhook URLs
 - A live dashboard
 - One-click replay
-- AI analysis via your local LLM (I use Ollama)
+- Local LLM analysis (I use Ollama)
 - Auto schema inference
 - Postman / cURL export
 
@@ -166,7 +166,7 @@ I use it for Stripe, GitHub, and Shopify webhooks. If you work with webhooks and
 
 https://github.com/bellum19/webcatch
 
-It's MIT licensed. Free forever, or $39 for Pro (unlimited history, bulk replay, team sharing).
+It's MIT licensed, with an optional $39 supporter license for priority help.
 
 Let me know what you think.
 

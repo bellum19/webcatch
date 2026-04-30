@@ -12,7 +12,7 @@ Most webhook tools send your data to someone else's cloud. Webcatch doesn't. Eve
 - **🔒 Privacy-first** — SQLite storage. No telemetry. No cloud lock-in.
 - **📡 Real-time dashboard** — WebSocket-powered live updates.
 - **🔄 Replay & proxy** — Resend webhooks, forward to backends, transform payloads with Python scripts, verify HMAC signatures.
-- **🧠 AI analysis** — Analyze webhooks with your local LLM (optional).
+- **🧠 Local LLM analysis** — Analyze webhook payloads on demand with your own OpenAI-compatible model server.
 - **🧬 Auto schema inference** — Automatically infer JSON schemas from webhook history. Validate new webhooks against the inferred schema and export as OpenAPI.
 - **🔍 Search & diff** — Full-text search. Side-by-side webhook comparison.
 
@@ -42,24 +42,23 @@ python main.py
 
 ## Features
 
-| Feature | Free | Pro |
-|---------|------|-----|
-| Unlimited endpoints | ✅ | ✅ |
-| Real-time dashboard | ✅ | ✅ |
-| Webhook replay | ✅ | ✅ |
-| Forwarding / proxy | ✅ | ✅ |
-| Signature verification | ✅ | ✅ |
-| Search & filter | ✅ | ✅ |
-| Webhook diff | ✅ | ✅ |
-| AI analysis | ✅ | ✅ |
-| **Postman / cURL export** | ✅ | ✅ |
-| **Transform scripts** | ✅ | ✅ |
-| **Schema inference & validation** | ✅ | ✅ |
-| Unlimited history | 100 recent | Unlimited |
-| Team sharing | ❌ | Up to 5 users |
-| Custom responses | ❌ | ✅ |
-| Bulk replay | ❌ | ✅ |
-| Priority support | ❌ | ✅ |
+| Feature | Open source |
+|---------|-------------|
+| Unlimited endpoints | ✅ |
+| Real-time dashboard | ✅ |
+| Webhook replay and bulk replay | ✅ |
+| Forwarding / proxy | ✅ |
+| Custom responses | ✅ |
+| Signature verification | ✅ |
+| Search & filter | ✅ |
+| Webhook diff | ✅ |
+| Local LLM analysis | ✅ |
+| Postman / cURL export | ✅ |
+| Transform scripts | ✅ |
+| Schema inference & validation | ✅ |
+| Configurable retention | ✅ |
+
+Webcatch is MIT licensed. A paid lifetime license is available if you want to support development and get priority help.
 
 ---
 
@@ -75,7 +74,7 @@ INSPECTOR_HOST=0.0.0.0
 # Auth (optional — protects dashboard & API, leaves webhook capture open)
 WEBCATCH_PASSWORD=your-secure-password
 
-# Stripe (optional, for Pro license sales)
+# Stripe (optional, for supporter license sales)
 STRIPE_SECRET_KEY=***
 STRIPE_PUBLISHABLE_KEY=pk_...
 STRIPE_WEBHOOK_SECRET=***
@@ -85,6 +84,8 @@ CANCEL_URL=https://yourdomain.com/
 # Local LLM (optional, for AI analysis)
 LOCAL_LLM_URL=http://127.0.0.1:8081/v1/chat/completions
 LOCAL_LLM_MODEL=qwen-local
+WEBCATCH_ANALYZE_ON_CAPTURE=false
+WEBCATCH_LLM_CONCURRENCY=1
 ```
 
 ---
@@ -106,7 +107,7 @@ Set `WEBCATCH_PASSWORD` to password-protect the dashboard and all API routes. We
 - **Vanilla JS** dashboard (no build step)
 - **WebSocket** real-time updates
 - **Docker** single-container deploy
-- Optional **local LLM** via OpenAI-compatible API (llama.cpp, Ollama, etc.)
+- Optional **local LLM** via OpenAI-compatible API (llama.cpp, Ollama, vLLM, etc.)
 
 ---
 
@@ -154,13 +155,13 @@ data.pop("ssn", None)
 body = json.dumps(data)
 ```
 
-Scripts run in a restricted sandbox with a 5-second timeout. If a script fails, the original webhook is forwarded unchanged and the error is logged.
+Scripts run with restricted builtins and a 5-second timeout. Treat transform scripts as trusted-admin configuration. If a script fails, the original webhook is not forwarded and the error is logged.
 
 ---
 
 ## Schema Inference
 
-Webcatch automatically analyzes JSON webhook bodies for each endpoint and infers a JSON Schema. New webhooks are validated against this schema in real-time — anomalies show a red ⚠️ badge on the webhook card.
+Webcatch automatically analyzes JSON webhook bodies for each endpoint and infers a JSON Schema. New webhooks are validated against this schema in real-time — anomalies show a red ⚠️ badge on the webhook card. Local LLM analysis is separate and runs on demand by default, or automatically when `WEBCATCH_ANALYZE_ON_CAPTURE=true`.
 
 What gets inferred:
 - **Types** — `string`, `integer`, `number`, `boolean`, `array`, `object`, `null`
