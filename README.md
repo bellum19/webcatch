@@ -20,17 +20,25 @@ Most webhook tools send your data to someone else's cloud. Webcatch doesn't. Eve
 
 ## Quick Start
 
-### Docker (recommended)
+### One-liner (Docker)
+
+```bash
+docker run -d \
+  -p 9120:9120 \
+  -v ./data:/app/data \
+  -e WEBCATCH_ANALYZE_ON_CAPTURE=false \
+  ghcr.io/bellum19/webcatch:latest
+```
+
+Open http://localhost:9120
+
+### Docker Compose
 
 ```bash
 git clone https://github.com/bellum19/webcatch.git
 cd webcatch
 docker compose up -d
 ```
-
-Open http://localhost:9120
-
-> **Linux Docker users:** `host.docker.internal` does not work by default on Linux. If you want local LLM analysis inside Docker, set `LOCAL_LLM_URL` to your host's IP (e.g., `http://192.168.1.50:8081/v1/chat/completions`) or add `extra_hosts: ["host.docker.internal:host-gateway"]` to `docker-compose.yml`.
 
 ### Local Python
 
@@ -39,6 +47,51 @@ cd webcatch
 pip install -r requirements.txt
 python main.py
 ```
+
+---
+
+## Local LLM Setup (optional)
+
+Webcatch can analyze webhook payloads with any OpenAI-compatible local model server.
+
+**1. Start a local LLM server.** Examples:
+
+- **llama.cpp** (fast, minimal):
+  ```bash
+  ./server -m your-model.gguf --port 8081
+  ```
+
+- **Ollama** (easy, many models):
+  ```bash
+  ollama run llama3.2
+  # Ollama serves on :11434 by default
+  ```
+
+- **vLLM** (high throughput):
+  ```bash
+  python -m vllm.entrypoints.openai.api_server --model your-model
+  ```
+
+**2. Point Webcatch at it.**
+
+| Setup | `LOCAL_LLM_URL` |
+|-------|-----------------|
+| Native Python | `http://127.0.0.1:8081/v1/chat/completions` |
+| Docker Desktop (Mac/Windows) | `http://host.docker.internal:8081/v1/chat/completions` (default) |
+| Docker (Linux) | `http://<HOST_IP>:8081/v1/chat/completions` or use `--add-host=host.docker.internal:host-gateway` |
+
+**3. Configure behavior in `.env`:**
+
+```bash
+LOCAL_LLM_URL=http://127.0.0.1:8081/v1/chat/completions
+LOCAL_LLM_MODEL=qwen-local
+WEBCATCH_ANALYZE_ON_CAPTURE=false   # true = auto-analyze every webhook
+WEBCATCH_LLM_CONCURRENCY=1          # max concurrent LLM calls
+```
+
+- `WEBCATCH_ANALYZE_ON_CAPTURE=false` (default) — Analysis runs only when you click **Analyze** in the dashboard.
+- `WEBCATCH_ANALYZE_ON_CAPTURE=true` — Every incoming webhook is automatically analyzed.
+- `WEBCATCH_LLM_CONCURRENCY=1` — Protects your local GPU from being overwhelmed.
 
 ---
 
@@ -74,7 +127,7 @@ INSPECTOR_PORT=9120
 INSPECTOR_HOST=0.0.0.0
 
 # Auth (optional — protects dashboard & API, leaves webhook capture open)
-WEBCATCH_PASSWORD=your-secure-password
+WEBCATCH_PASSWORD=your-s...word
 
 # Stripe (optional, for supporter license sales)
 STRIPE_SECRET_KEY=***
@@ -83,7 +136,7 @@ STRIPE_WEBHOOK_SECRET=***
 SUCCESS_URL=https://yourdomain.com/success?session_id={CHECKOUT_SESSION_ID}
 CANCEL_URL=https://yourdomain.com/
 
-# Local LLM (optional, for AI analysis)
+# Local LLM (optional — see Local LLM Setup section above)
 LOCAL_LLM_URL=http://127.0.0.1:8081/v1/chat/completions
 LOCAL_LLM_MODEL=qwen-local
 WEBCATCH_ANALYZE_ON_CAPTURE=false

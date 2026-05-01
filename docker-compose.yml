@@ -1,5 +1,6 @@
 services:
   webhook-inspector:
+    image: ghcr.io/bellum19/webcatch:latest
     build: .
     container_name: webhook-inspector
     ports:
@@ -8,4 +9,7 @@ services:
       - ./data:/app/data
     env_file:
       - .env
+    # Uncomment for Linux if you need host.docker.internal to reach a local LLM
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
     restart: unless-stopped
