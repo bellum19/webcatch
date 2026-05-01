@@ -30,6 +30,8 @@ docker compose up -d
 
 Open http://localhost:9120
 
+> **Linux Docker users:** `host.docker.internal` does not work by default on Linux. If you want local LLM analysis inside Docker, set `LOCAL_LLM_URL` to your host's IP (e.g., `http://192.168.1.50:8081/v1/chat/completions`) or add `extra_hosts: ["host.docker.internal:host-gateway"]` to `docker-compose.yml`.
+
 ### Local Python
 
 ```bash
@@ -128,6 +130,7 @@ Set `WEBCATCH_PASSWORD` to password-protect the dashboard and all API routes. We
 | `/wh/{id}` | ANY | Capture webhooks |
 | `/api/webhooks/{id}/replay` | POST | Replay webhook |
 | `/api/webhooks/{id}/export` | GET | Export single webhook |
+| `/api/webhooks/{id}/analyze` | POST | Analyze webhook with local LLM |
 | `/api/webhooks/{a}/diff/{b}` | GET | Compare webhooks |
 | `/ws` | WebSocket | Live updates |
 
